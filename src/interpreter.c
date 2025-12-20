@@ -5,6 +5,7 @@
 
 #ifndef NO_STD_INC
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #endif
@@ -41,7 +42,7 @@ void var_decls_free_data(DynArr *var_decls) {
 }
 
 Interpreter *interpreter_create(DynArr *stmts, DynArr *var_decls) {
-  Interpreter *interpreter = malloc(sizeof(Interpreter));
+  Interpreter *interpreter = calloc(1, sizeof(Interpreter));
   interpreter->stmts = stmts;
   // interpreter->exec_ptr = 0;
   var_decls_init_data(var_decls);
@@ -56,48 +57,56 @@ void interpreter_free(Interpreter *interpreter) {
 
 int eval_expr(Interpreter *interpreter, Expr *expr);
 
-inline void write_operand(Interpreter *interpreter, Operand *operand,
+static int *operand_get_ref(Interpreter *interpreter, Operand *operand) {
+  size_t decl_idx = operand->decl_idx;
+  VarDecl *decl = da_get(interpreter->var_decls, decl_idx);
+  switch (operand->typ) {
+  case OPERAND_INT_VAR:
+    return &decl->data.i.val;
+  case OPERAND_ARR_ELEM: {
+    int idx_res = eval_expr(interpreter, &operand->idx_expr);
+    // if (idx_res > decl->end || idx_res < decl->start) {
+    //   err_log("Index(%d) of Array(#%zu) is Out of Bounds (in %s)\n", idx_res,
+    //           operand->decl_idx, __FUNCTION__);
+    // }
+    return &decl->data.a.arr[idx_res - decl->start];
+  }
+  default:
+    // err_log("Operand(#%zu) isn't supported (in %s)\n", operand->decl_idx,
+    // __FUNCTION__);
+    return NULL;
+  }
+}
+
+inline void operand_write(Interpreter *interpreter, Operand *operand,
                           int data) {
-  size_t decl_idx = operand->decl_idx;
-  VarDecl *decl = da_get(interpreter->var_decls, decl_idx);
-  switch (operand->typ) {
-  case OPERAND_INT_VAR:
-    decl->data.i.val = data;
-    return;
-  case OPERAND_ARR_ELEM:
-    decl->data.a.arr[eval_expr(interpreter, &operand->idx_expr) - decl->start] =
-        data;
-    return;
-  }
+#ifndef NO_DEBUG
+  interpreter->stats.operand_write++;
+#endif
+  *operand_get_ref(interpreter, operand) = data;
 }
 
-inline int read_operand(Interpreter *interpreter, Operand *operand) {
-  size_t decl_idx = operand->decl_idx;
-  VarDecl *decl = da_get(interpreter->var_decls, decl_idx);
-  int data = 0;
-  switch (operand->typ) {
-  case OPERAND_INT_VAR:
-    data = decl->data.i.val;
-    break;
-  case OPERAND_ARR_ELEM:
-    data = decl->data.a
-               .arr[eval_expr(interpreter, &operand->idx_expr) - decl->start];
-    break;
-  }
-  return data;
+inline int operand_read(Interpreter *interpreter, Operand *operand) {
+#ifndef NO_DEBUG
+  interpreter->stats.operand_read++;
+#endif
+  return *operand_get_ref(interpreter, operand);
 }
 
-inline int eval_expr(Interpreter *interpreter, Expr *expr) {
+int eval_expr(Interpreter *interpreter, Expr *expr) {
+#ifndef NO_DEBUG
+  interpreter->stats.expression_eval++;
+#endif
   DynArr *terms = &expr->terms;
   int res = 0;
   for (int i = 0; i < terms->item_cnts; i++) {
     ExprTerm *term = da_get(terms, i);
     switch (term->typ) {
+    case EXPR_TERM_OPERAND:
+      res += term->coefficient * operand_read(interpreter, &term->operand);
+      break;
     case EXPR_TERM_CONST:
       res += term->coefficient * term->constant;
-      break;
-    case EXPR_TERM_OPERAND:
-      res += term->coefficient * read_operand(interpreter, &term->operand);
       break;
     }
   }
@@ -106,10 +115,8 @@ inline int eval_expr(Interpreter *interpreter, Expr *expr) {
 
 void execute_stmts(Interpreter *interpreter, DynArr *stmts);
 
-char execute_cond(Interpreter *interpreter, Cond *cond) {
-  int left = eval_expr(interpreter, &cond->left);
-  int right = eval_expr(interpreter, &cond->right);
-  switch (cond->typ) {
+char assign_cond_old(enum TokType cond_typ, int left, int right) {
+  switch (cond_typ) {
   case TOK_CMP_LT:
     return left < right;
   case TOK_CMP_GT:
@@ -125,6 +132,34 @@ char execute_cond(Interpreter *interpreter, Cond *cond) {
   default:
     return 0;
   }
+}
+
+char assign_cond(enum TokType cond_typ, int left, int right) {
+  cond_typ -= TOK_CMP_LT;
+  unsigned int lt = (unsigned int)(left < right);
+  unsigned int eq = (unsigned int)(left == right);
+  unsigned int gt = (unsigned int)(left > right);
+
+  static const char result_table[6] = {
+      0b001, // TOK_CMP_LT: lt
+      0b100, // TOK_CMP_GT: gt
+      0b011, // TOK_CMP_LE: lt || eq
+      0b110, // TOK_CMP_GE: gt || eq
+      0b010, // TOK_CMP_EQ: eq
+      0b101  // TOK_CMP_NEQ: lt || gt
+  };
+
+  if (cond_typ >= 0 && cond_typ < 6) {
+    unsigned int mask = result_table[cond_typ];
+    return (lt & mask) | (eq & (mask >> 1)) | (gt & (mask >> 2));
+  }
+  return 0;
+}
+
+char execute_cond(Interpreter *interpreter, Cond *cond) {
+  int left = eval_expr(interpreter, &cond->left);
+  int right = eval_expr(interpreter, &cond->right);
+  return assign_cond(cond->typ, left, right);
 }
 
 void execute_stmt(Interpreter *interpreter, Stmt *stmt) {
@@ -146,11 +181,9 @@ void execute_stmt(Interpreter *interpreter, Stmt *stmt) {
     int start = eval_expr(interpreter, &hor->start);
     int end = eval_expr(interpreter, &hor->end);
     for (int i = start; i <= end; i++) {
-      write_operand(interpreter, &hor->var, i);
+      operand_write(interpreter, &hor->var, i);
       execute_stmts(interpreter, &hor->stmts);
     }
-    // apply end
-    write_operand(interpreter, &hor->var, end);
   } break;
   case STMT_YOSORO_CMD: {
     YosoroStmt *yosoro = &stmt->inner.yosoro;
@@ -160,7 +193,7 @@ void execute_stmt(Interpreter *interpreter, Stmt *stmt) {
   case STMT_SET_CMD: {
     SetStmt *set = &stmt->inner.set;
     int res = eval_expr(interpreter, &set->expr);
-    write_operand(interpreter, &set->operand, res);
+    operand_write(interpreter, &set->operand, res);
   } break;
   }
 }
@@ -177,3 +210,16 @@ void interpreter_execute(Interpreter *interpreter) {
   DynArr *stmts = interpreter->stmts;
   execute_stmts(interpreter, stmts);
 }
+
+#ifndef NO_DEBUG
+void interpreter_stats(Interpreter *interpreter) {
+  struct InterpreterStats stats = interpreter->stats;
+  logger("Interpreter Stats:\n"
+         "Operand\n"
+         "  Read : %zu\n"
+         "  Write: %zu\n"
+         "Expression\n"
+         "  Eval : %zu\n",
+         stats.operand_read, stats.operand_write, stats.expression_eval);
+}
+#endif

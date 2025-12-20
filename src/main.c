@@ -56,6 +56,9 @@ void test() {
   // interpreter_execute(interpreter);
   CLOCK_FUNC(start_time, end_time, time_spent, interpreter_execute,
              interpreter);
+#ifndef NO_DEBUG
+  interpreter_stats(interpreter);
+#endif
   interpreter_free(interpreter);
   parser_free(parser);
   lexer_free(lexer);

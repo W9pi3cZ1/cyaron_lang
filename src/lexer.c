@@ -24,13 +24,12 @@ const char *debug_token_type(enum TokType tok_type) {
 #endif
 
 Lexer *lexer_create(char *src) {
-  Lexer *lexer = malloc(sizeof(Lexer));
+  Lexer *lexer = calloc(1, sizeof(Lexer));
   str_pool_init(&lexer->tok_val_pool, 512, 16);
   lexer->src_len = strlen(src);
   lexer->src = src;
   // lexer->src = malloc(lexer->src_len);
   // memcpy(lexer->src, src, lexer->src_len); // That's a copy!! :)
-  lexer->ch_pos = 0;
   da_init(&lexer->toks, sizeof(Token), 128);
   return lexer;
 }
@@ -164,6 +163,12 @@ void lexer_tokenize(Lexer *lexer) {
       SCH_TOK(TOK_RBRACE, '}')
       SCH_TOK(TOK_LBRACKET, '[')
       SCH_TOK(TOK_RBRACKET, ']')
+    case '#':
+      // Skip until `\n`
+      while (lexer->src[lexer->ch_pos] != '\n') {
+        lexer->ch_pos++;
+      }
+      break;
     default:
       // Double dot(..)
       if (ch == '.' && lexer->ch_pos + 1 < lexer->src_len &&

@@ -1,0 +1,34 @@
+{ vars
+    n:int
+    result:int
+    stack:array[int, 1..2000]  # 模拟调用栈
+    top:int
+    temp:int
+}
+
+# 设置要计算的斐波那契数
+:set n, 30
+
+# 初始化栈
+:set top, 1
+:set stack[1], n
+
+# 模拟递归计算 fib(n)
+{ while gt, top, 0
+    :set temp, stack[top]
+    :set top, top - 1
+    
+    # 基本情况：fib(0)=0, fib(1)=1
+    { ihu le, temp, 1
+        :set result, result + temp
+    }
+    { ihu gt, temp, 1
+        # 模拟递归调用：push fib(n-1) 和 fib(n-2)
+        :set top, top + 1
+        :set stack[top], temp - 1
+        :set top, top + 1
+        :set stack[top], temp - 2
+    }
+}
+
+:yosoro result

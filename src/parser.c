@@ -11,9 +11,8 @@
 #endif
 
 Parser *parser_create(DynArr *toks) {
-  Parser *parser = malloc(sizeof(Parser));
+  Parser *parser = calloc(1, sizeof(Parser));
   parser->toks = toks;
-  parser->pos = 0;
   da_init(&parser->stmts, sizeof(Stmt), 16);
   da_init(&parser->var_decls, sizeof(VarDecl), 16);
   return parser;
@@ -232,17 +231,32 @@ void terms_add_operand(DynArr *terms, Operand op, int sign) {
   return;
 }
 
+static int is_expr_end(Parser *parser) {
+  Token *cur_tok = current_token(parser);
+  if (!cur_tok) {
+    return 1;
+  }
+  switch (cur_tok->type) {
+  case TOK_EOF:
+  case TOK_COLON:
+  case TOK_COMMA:
+  case TOK_LBRACE:
+  case TOK_RBRACE:
+  case TOK_LBRACKET:
+  case TOK_RBRACKET:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
 void parse_expr(Parser *parser, Expr *expr) {
   da_init(&expr->terms, sizeof(ExprTerm), 8);
   DynArr *terms = &expr->terms;
   int const_val = 0;
   short sign = 1;
 
-  while (current_token(parser) &&
-         !(match_token(parser, TOK_EOF) || match_token(parser, TOK_COLON) ||
-           match_token(parser, TOK_COMMA) || match_token(parser, TOK_RBRACE) ||
-           match_token(parser, TOK_LBRACE) ||
-           match_token(parser, TOK_RBRACKET))) {
+  while (!is_expr_end(parser)) {
     sign = 1;
     if (match_token(parser, TOK_PLUS)) {
       consume_token(parser);

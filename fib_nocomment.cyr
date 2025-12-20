@@ -1,0 +1,32 @@
+{ vars
+    n:int
+    result:int
+    stack:array[int, 1..2000] 
+    top:int
+    temp:int
+    i:int
+}
+
+:set n, 30
+
+:set top, 1
+:set stack[1], n
+
+{ while gt, top, 0
+    :set temp, stack[top]
+    :set top, top - 1
+    
+
+    { ihu le, temp, 1
+        :set result, result + temp
+    }
+    { ihu gt, temp, 1
+    
+        :set top, top + 1
+        :set stack[top], temp - 1
+        :set top, top + 1
+        :set stack[top], temp - 2
+    }
+}
+
+:yosoro result
