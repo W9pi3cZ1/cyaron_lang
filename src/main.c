@@ -44,29 +44,31 @@ void test() {
   size_t time_spent;
   char *src;
   CLOCK_FUNC(start_time, end_time, time_spent, read_src, &src);
-  Lexer *lexer = lexer_create(src);
+  Lexer lexer;
+  lexer_init(&lexer, src);
   // lexer_tokenize(lexer);
-  CLOCK_FUNC(start_time, end_time, time_spent, lexer_tokenize, lexer);
+  CLOCK_FUNC(start_time, end_time, time_spent, lexer_tokenize, &lexer);
 #ifndef NO_DEBUG
-  debug_lexer(lexer);
+  debug_lexer(&lexer);
 #endif
-  Parser *parser = parser_create(&lexer->toks);
+  Parser parser;
+  parser_init(&parser, &lexer.toks);
   // parser_parse(parser);
-  CLOCK_FUNC(start_time, end_time, time_spent, parser_parse, parser);
+  CLOCK_FUNC(start_time, end_time, time_spent, parser_parse, &parser);
 #ifndef NO_DEBUG
-  debug_parser(parser);
+  debug_parser(&parser);
 #endif
-  Interpreter *interpreter =
-      interpreter_create(&parser->stmts, &parser->var_decls);
+  Interpreter interpreter;
+  interpreter_init(&interpreter, &parser.stmts, &parser.var_decls);
   // interpreter_execute(interpreter);
   CLOCK_FUNC(start_time, end_time, time_spent, interpreter_execute,
-             interpreter);
+             &interpreter);
 #ifndef NO_DEBUG
-  interpreter_stats(interpreter);
+  interpreter_stats(&interpreter);
 #endif
-  interpreter_free(interpreter);
-  parser_free(parser);
-  lexer_free(lexer);
+  interpreter_free(&interpreter);
+  parser_free(&parser);
+  lexer_free(&lexer);
   free(src);
 }
 

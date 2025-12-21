@@ -1,6 +1,5 @@
 #ifndef NO_CUSTOM_INC
 #include "interpreter.h"
-#include "lexer.h"
 #include "parser.h"
 #include "utils.h"
 #endif
@@ -10,6 +9,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #endif
 
 void var_decls_init_data(DynArr *var_decls) {
@@ -43,18 +43,23 @@ void var_decls_free_data(DynArr *var_decls) {
   }
 }
 
-Interpreter *interpreter_create(DynArr *stmts, DynArr *var_decls) {
-  Interpreter *interpreter = calloc(1, sizeof(Interpreter));
+void interpreter_init(Interpreter *interpreter, DynArr *stmts,
+                      DynArr *var_decls) {
+  memset(interpreter, 0, sizeof(Interpreter));
   interpreter->stmts = stmts;
   // interpreter->exec_ptr = 0;
   var_decls_init_data(var_decls);
   interpreter->var_decls = var_decls;
+}
+
+Interpreter *interpreter_create(DynArr *stmts, DynArr *var_decls) {
+  Interpreter *interpreter = malloc(sizeof(Interpreter));
+  interpreter_init(interpreter, stmts, var_decls);
   return interpreter;
 }
 
 void interpreter_free(Interpreter *interpreter) {
   var_decls_free_data(interpreter->var_decls);
-  free(interpreter);
 }
 
 int eval_expr(Interpreter *interpreter, Expr *expr);
@@ -71,8 +76,12 @@ compute_array_index(Interpreter *interpreter, Expr *idx_expr, int start) {
 }
 
 int *operand_get_ref(Interpreter *interpreter, Operand *operand) {
-  size_t decl_idx = operand->decl_idx;
-  VarDecl *decl = (VarDecl *)(interpreter->var_decls->items) + decl_idx;
+  if (operand->decl_expand == UNEXPANDED) {
+    size_t decl_idx = operand->decl_idx;
+    operand->decl_ptr = (VarDecl *)(interpreter->var_decls->items) + decl_idx;
+    operand->decl_expand = EXPANDED;
+  }
+  VarDecl *decl = operand->decl_ptr;
   if (operand->typ == OPERAND_INT_VAR) {
     return &decl->data.i.val;
   } else { // OPERAND_ARR_ELEM
@@ -112,24 +121,25 @@ int eval_expr(Interpreter *interpreter, Expr *expr) {
 
 void execute_stmts(Interpreter *interpreter, DynArr *stmts);
 
-inline char assign_cond(enum TokType cond_typ, int left, int right) {
-  cond_typ -= TOK_CMP_LT;
-  if (cond_typ < 0 || cond_typ >= 6)
-    return 0;
+inline char assign_cond(enum CmpType cond_typ, int left, int right) {
+  // Assume it always within range ...
+  // if (cond_typ < 0 || cond_typ >= 6)
+  //   return 0;
 
-  int lt = (left < right);
-  int gt = (left > right);
+  // enum CmpType {
+  //   CMP_LT = 0b001,
+  //   CMP_GT = 0b010,
+  //   CMP_NEQ = 0b011,
+  //   CMP_GE = 0b101,
+  //   CMP_LE = 0b110,
+  //   CMP_EQ = 0b111,
+  // };
 
-  const char results[] = {
-      lt,       // TOK_CMP_LT
-      gt,       // TOK_CMP_GT
-      lt || gt, // TOK_CMP_NEQ
-  };
-  // !lt, // TOK_CMP_GE
-  // !gt, // TOK_CMP_LE
-  // !(lt || gt), // TOK_CMP_EQ
-  return results[cond_typ % 3] ^ (cond_typ >= 3);
-  // return cond_typ >= 3 ? !results[cond_typ - 3] : results[cond_typ];
+  const char lt = left < right;
+  const char gt = left > right;
+  const char hi = cond_typ >> 2;
+
+  return (((lt | gt << 1) & cond_typ) && 1) ^ hi;
 }
 
 char execute_cond(Interpreter *interpreter, Cond *cond) {

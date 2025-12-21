@@ -25,14 +25,19 @@ const char *debug_token_type(enum TokType tok_type) {
 }
 #endif
 
-Lexer *lexer_create(char *src) {
-  Lexer *lexer = calloc(1, sizeof(Lexer));
+void lexer_init(Lexer *lexer, char *src) {
+  memset(lexer, 0, sizeof(Lexer));
   str_pool_init(&lexer->tok_val_pool, 512, 16);
   lexer->src_len = strlen(src);
   lexer->src = src;
   // lexer->src = malloc(lexer->src_len);
   // memcpy(lexer->src, src, lexer->src_len); // That's a copy!! :)
   da_init(&lexer->toks, sizeof(Token), 128);
+}
+
+Lexer *lexer_create(char *src) {
+  Lexer *lexer = malloc(sizeof(Lexer));
+  lexer_init(lexer, src);
   return lexer;
 }
 
@@ -40,7 +45,6 @@ void lexer_free(Lexer *lexer) {
   // free token list
   da_free(&lexer->toks);
   str_pool_free(&lexer->tok_val_pool);
-  free(lexer);
 }
 
 void token_init(Token *tok, enum TokType tok_type, const char *str) {

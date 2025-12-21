@@ -6,3 +6,4 @@ cyaron_lang.zip
 *.d
 perf.data
 perf.data.old
+build/cyaron

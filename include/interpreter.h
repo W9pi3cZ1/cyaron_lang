@@ -39,6 +39,7 @@ typedef struct Interpreter {
 
 void var_decls_init_data(DynArr *var_decls);
 void var_decls_free_data(DynArr *var_decls);
+void interpreter_init(Interpreter *interpreter,DynArr *stmts, DynArr *var_decls);
 Interpreter *interpreter_create(DynArr *stmts, DynArr *var_decls);
 void interpreter_free(Interpreter *interpreter);
 void interpreter_execute(Interpreter *interpreter);

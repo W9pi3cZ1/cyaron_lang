@@ -12,11 +12,16 @@
 #include <string.h>
 #endif
 
-Parser *parser_create(DynArr *toks) {
-  Parser *parser = calloc(1, sizeof(Parser));
+void parser_init(Parser *parser, DynArr *toks) {
+  memset(parser, 0, sizeof(Parser));
   parser->toks = toks;
   da_init(&parser->stmts, sizeof(Stmt), 16);
   da_init(&parser->var_decls, sizeof(VarDecl), 50);
+}
+
+Parser *parser_create(DynArr *toks) {
+  Parser *parser = malloc(sizeof(Parser));
+  parser_init(parser, toks);
   return parser;
 }
 
@@ -70,7 +75,6 @@ void free_stmts(DynArr *stmts) {
 void parser_free(Parser *parser) {
   free_stmts(&parser->stmts);
   da_free(&parser->var_decls);
-  free(parser);
 }
 
 static Token *current_token(Parser *parser) {
@@ -153,6 +157,7 @@ size_t operand_finder(Parser *parser, const char *var_name,
 void parse_operand(Parser *parser, Operand *operand) {
   Token *operand_tok = current_token(parser);
   consume_token(parser); // var_name
+  operand->decl_expand = UNEXPANDED;
   operand->typ = OPERAND_INT_VAR;
   if (match_token(parser, TOK_LBRACKET)) {
     operand->typ = OPERAND_ARR_ELEM;
@@ -256,8 +261,9 @@ void parse_expr(Parser *parser, Expr *expr) {
 }
 
 void parse_cond(Parser *parser, Cond *cond) {
-  cond->typ = next_token(parser)->type; // EQ, NEQ...
-  consume_token(parser);                // ,
+  cond->typ = next_token(parser)->type - TOK_CMP_LT + 1; // EQ, NEQ...
+
+  consume_token(parser); // ,
   parse_expr(parser, &cond->left);
   consume_token(parser); // ,
   parse_expr(parser, &cond->right);
@@ -439,7 +445,7 @@ void debug_blk(DynArr *stmts, int indent) {
 }
 
 void debug_cond(Cond *cond) {
-  printf("%s", debug_token_type(cond->typ));
+  printf("%s", debug_token_type(cond->typ + TOK_CMP_LT - 1));
   printf(",");
   debug_expr(&cond->left);
   printf(",");

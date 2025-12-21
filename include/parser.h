@@ -5,7 +5,6 @@
 
 #ifndef NO_CUSTOM_INC
 #include "interpreter.h"
-#include "lexer.h"
 #include "utils.h"
 #endif
 
@@ -25,9 +24,18 @@ typedef struct Expr {
 
 typedef struct VarDecl VarDecl;
 
+enum MayExpand {
+  UNEXPANDED,
+  EXPANDED,
+};
+
 typedef struct Operand {
   enum OperandTyp typ;
-  int decl_idx;
+  enum MayExpand decl_expand;
+  union {
+    int decl_idx;
+    VarDecl *decl_ptr;
+  };
   union {
     Expr idx_expr; // for ArrElem
   };
@@ -54,18 +62,27 @@ enum VarType {
 
 typedef struct VarDecl {
   enum VarType typ;
-  // union {
+  union {
   VarData data;
   const char *name;
-  // };
+  };
   struct {
     int start;
     int end;
   };
 } VarDecl;
 
+enum CmpType {
+  CMP_LT = 0b001,
+  CMP_GT = 0b010,
+  CMP_NEQ = 0b011,
+  CMP_GE = 0b101,
+  CMP_LE = 0b110,
+  CMP_EQ = 0b111,
+};
+
 typedef struct Cond {
-  enum TokType typ; // TOK_CMP_[XXX]
+  enum CmpType typ; // TOK_CMP_[XXX]
   Expr left;
   Expr right;
 } Cond;
@@ -114,6 +131,7 @@ typedef struct Parser {
   DynArr var_decls; // VarDecl *
 } Parser;
 
+void parser_init(Parser *parser,DynArr *toks);
 Parser *parser_create(DynArr *toks);
 void parser_free(Parser *parser);
 size_t operand_finder(Parser *parser, const char *var_name,

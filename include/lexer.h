@@ -31,6 +31,7 @@ typedef struct Lexer {
   StrPool tok_val_pool;
 } Lexer;
 
+void lexer_init(Lexer *lexer, char *src);
 Lexer *lexer_create(char *src);
 void lexer_free(Lexer *lexer);
 void token_init(Token *tok, enum TokType tok_type, const char *str);
