@@ -1,6 +1,11 @@
 #ifndef _LEXER_H_
 #define _LEXER_H_
+
+#pragma once
+
+#ifndef NO_CUSTOM_INC
 #include "utils.h"
+#endif
 
 #ifndef NO_STD_INC
 #include <stddef.h>

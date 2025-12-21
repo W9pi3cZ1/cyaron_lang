@@ -1,56 +1,49 @@
 #ifndef _PARSER_H_
 #define _PARSER_H_
 
+#pragma once
+
+#ifndef NO_CUSTOM_INC
 #include "interpreter.h"
 #include "lexer.h"
 #include "utils.h"
+#endif
 
 #ifndef NO_STD_INC
 #include <stddef.h>
 #endif
-
-#define CMD_PREFIX 0xf0
-#define BLK_PREFIX 0x00
 
 enum OperandTyp {
   OPERAND_INT_VAR,
   OPERAND_ARR_ELEM,
 };
 
-enum ExprTermTyp {
-  EXPR_TERM_CONST,
-  EXPR_TERM_OPERAND, // Something can be operand
-};
-
 typedef struct Expr {
-  DynArr terms; // ExprTerm *
+  DynArr op_terms; // OperandTerm *
+  int constant;
 } Expr;         // Use Flatten Expression
 
 typedef struct VarDecl VarDecl;
 
 typedef struct Operand {
   enum OperandTyp typ;
-  size_t decl_idx;
+  int decl_idx;
   union {
     Expr idx_expr; // for ArrElem
   };
 } Operand;
 
-typedef struct ExprTerm {
+typedef struct OperandTerm {
   int coefficient;
-  enum ExprTermTyp typ;
-  union {
-    int constant;
-    Operand operand;
-  };
-} ExprTerm;
+  Operand operand;
+} OperandTerm;
 
 enum StmtType {
   // STMT_VARS_BLK, Moved to Parser
-  STMT_IHU_BLK = BLK_PREFIX,
+  STMT_IHU_BLK,
   STMT_WHILE_BLK,
   STMT_HOR_BLK,
-  STMT_YOSORO_CMD = CMD_PREFIX,
+  STMT_YOSORO_CMD,
   STMT_SET_CMD,
 };
 
@@ -66,8 +59,8 @@ typedef struct VarDecl {
   const char *name;
   // };
   struct {
-    size_t start;
-    size_t end;
+    int start;
+    int end;
   };
 } VarDecl;
 

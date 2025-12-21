@@ -1,6 +1,8 @@
+#ifndef NO_CUSTOM_INC
 #include "interpreter.h"
 #include "lexer.h"
 #include "parser.h"
+#endif
 
 #ifndef NO_STD_INC
 #include <stddef.h>
@@ -9,17 +11,20 @@
 #include <time.h>
 #endif
 
-#define CHUNK_SIZE 512
 void read_src(char **src) {
   FILE *input = stdin;
-  fseek(input, 0, SEEK_END);
-  size_t input_size = ftell(input);
-  fseek(input, 0, SEEK_SET);
-  *src = malloc(input_size + 1);
-  fread(*src, CHUNK_SIZE, input_size / CHUNK_SIZE, input);
-  size_t remaining = input_size % CHUNK_SIZE;
-  fread(*src + input_size - remaining, 1, remaining, input);
-  (*src)[input_size] = '\0';
+  size_t capacity = 32;
+  *src = malloc(capacity);
+  size_t input_size = 0;
+  while (!feof(input)) {
+    if (input_size >= capacity) {
+      capacity *= 2;
+      *src = realloc(*src, capacity);
+    }
+    (*src)[input_size] = fgetc(input);
+    input_size++;
+  }
+  (*src)[input_size - 1] = '\0'; // Replace EOF
 }
 
 #ifndef NO_CLOCK

@@ -2,3 +2,7 @@ compile_commands.json
 CYaRon_lang_min_impl.c
 cyaron_lang.zip
 .cache
+*.o
+*.d
+perf.data
+perf.data.old

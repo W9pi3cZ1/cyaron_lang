@@ -4,7 +4,6 @@
     stack:array[int, 1..2000] 
     top:int
     temp:int
-    i:int
 }
 
 :set n, 30

@@ -1,5 +1,7 @@
+#ifndef NO_CUSTOM_INC
 #include "lexer.h"
 #include "utils.h"
+#endif
 
 #ifndef NO_STD_INC
 #include <ctype.h>
@@ -94,8 +96,10 @@ const struct KeyWords {
 const size_t keyword_cnts = sizeof(keywords) / sizeof(*keywords);
 
 int check_keyword(const char *tok_val, size_t len) {
-  for (int i = 0; i < keyword_cnts; ++i) {
-    if (keywords[i].len == len && strncmp(tok_val, keywords[i].val, len) == 0) {
+  const struct KeyWords *keyword_ptr = keywords;
+  for (int i = 0; i < keyword_cnts; ++i, ++keyword_ptr) {
+    if (keyword_ptr->len == len &&
+        strncmp(tok_val, keyword_ptr->val, len) == 0) {
       return i;
     }
   }

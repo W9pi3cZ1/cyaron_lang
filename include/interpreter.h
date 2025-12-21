@@ -1,7 +1,12 @@
 #ifndef _INTERPRETER_H_
 #define _INTERPRETER_H_
 
+#pragma once
+
+#ifndef NO_CUSTOM_INC
 #include "utils.h"
+#endif
+
 #ifndef NO_STD_INC
 #include <stddef.h>
 #endif
@@ -32,6 +37,8 @@ typedef struct Interpreter {
   #endif
 } Interpreter;
 
+void var_decls_init_data(DynArr *var_decls);
+void var_decls_free_data(DynArr *var_decls);
 Interpreter *interpreter_create(DynArr *stmts, DynArr *var_decls);
 void interpreter_free(Interpreter *interpreter);
 void interpreter_execute(Interpreter *interpreter);

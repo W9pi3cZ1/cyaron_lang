@@ -1,6 +1,8 @@
+#ifndef NO_CUSTOM_INC
 #include "parser.h"
 #include "lexer.h"
 #include "utils.h"
+#endif
 
 #ifndef NO_STD_INC
 #include <stdarg.h>
@@ -14,24 +16,18 @@ Parser *parser_create(DynArr *toks) {
   Parser *parser = calloc(1, sizeof(Parser));
   parser->toks = toks;
   da_init(&parser->stmts, sizeof(Stmt), 16);
-  da_init(&parser->var_decls, sizeof(VarDecl), 16);
+  da_init(&parser->var_decls, sizeof(VarDecl), 50);
   return parser;
 }
 
 void free_operand(Operand *op);
 
 void free_expr(Expr *expr) {
-  for (int i = 0; i < expr->terms.item_cnts; i++) {
-    ExprTerm *term = da_get(&expr->terms, i);
-    switch (term->typ) {
-    case EXPR_TERM_CONST:
-      continue;
-    case EXPR_TERM_OPERAND:
-      free_operand(&term->operand);
-      break;
-    }
+  OperandTerm *op_term = expr->op_terms.items;
+  for (int i = 0; i < expr->op_terms.item_cnts; i++, op_term++) {
+    free_operand(&op_term->operand);
   }
-  da_free(&expr->terms);
+  da_free(&expr->op_terms);
 }
 
 void free_operand(Operand *op) {
@@ -41,8 +37,8 @@ void free_operand(Operand *op) {
 }
 
 void free_stmts(DynArr *stmts) {
-  for (int i = 0; i < stmts->item_cnts; i++) {
-    Stmt *stmt = da_get(stmts, i);
+  Stmt *stmt = stmts->items;
+  for (int i = 0; i < stmts->item_cnts; i++, stmt++) {
     switch (stmt->typ) {
     case STMT_YOSORO_CMD:
       free_expr(&stmt->inner.yosoro.expr);
@@ -113,7 +109,6 @@ void parse_vars(Parser *parser) {
   consume_token(parser); // {
   consume_token(parser); // vars
   DynArr *var_decls = &parser->var_decls;
-  size_t cnt = 0;
   while (!match_token(parser, TOK_RBRACE)) {
     Token *ident = next_token(parser); // IDENT
     consume_token(parser);             // :
@@ -128,12 +123,11 @@ void parse_vars(Parser *parser) {
       consume_token(parser); // int
       consume_token(parser); // ,
       decl->typ = VAR_ARR;
-      decl->start = atoll(next_token(parser)->str);
+      decl->start = atoi(next_token(parser)->str);
       consume_token(parser); // ..
-      decl->end = atoll(next_token(parser)->str);
+      decl->end = atoi(next_token(parser)->str);
       consume_token(parser); // ]
     } // else ERR!
-    cnt++;
   }
   consume_token(parser); // }
 }
@@ -143,21 +137,12 @@ void parse_expr(Parser *parser, Expr *expr);
 
 size_t operand_finder(Parser *parser, const char *var_name,
                       enum OperandTyp type) {
-  enum VarType target_type = 0xff;
-  switch (type) {
-  case OPERAND_INT_VAR:
-    target_type = VAR_INT;
-    break;
-  case OPERAND_ARR_ELEM:
-    target_type = VAR_ARR;
-    break;
-  }
-  for (int i = 0; i < parser->var_decls.item_cnts; i++) {
-    VarDecl *decl = da_get(&parser->var_decls, i);
-    if ((target_type == 0xff || decl->typ == target_type) &&
-        decl->name == var_name
+  VarDecl *decl = parser->var_decls.items;
+  for (int i = 0; i < parser->var_decls.item_cnts; i++, decl++) {
+    if (decl->name == var_name
         // || strcmp(decl->name, var_name) == 0
         // strcmp is unecessary (because of StrPool)
+        // warn: without type checker
     ) {
       return i;
     }
@@ -182,22 +167,15 @@ int is_operand_eq(Operand *a, Operand *b);
 
 int is_expr_eq(Expr *a, Expr *b) {
   // *Completely Equal*
-  int cnts = a->terms.item_cnts;
-  if (cnts != b->terms.item_cnts) {
+  int cnts = a->op_terms.item_cnts;
+  if (cnts != b->op_terms.item_cnts || a->constant != b->constant) {
     return 0;
   }
   for (int i = 0; i < cnts; i++) {
-    ExprTerm *a_term = da_get(&a->terms, i);
-    ExprTerm *b_term = da_get(&b->terms, i);
-    if (a_term->typ != b_term->typ) {
+    OperandTerm *a_term = da_get(&a->op_terms, i);
+    OperandTerm *b_term = da_get(&b->op_terms, i);
+    if (!is_operand_eq(&a_term->operand, &b_term->operand))
       return 0;
-    }
-    switch (a_term->typ) {
-    case EXPR_TERM_CONST:
-      return a_term->constant == b_term->constant;
-    case EXPR_TERM_OPERAND:
-      return is_operand_eq(&a_term->operand, &b_term->operand);
-    }
   }
   return 1;
 }
@@ -213,21 +191,20 @@ int is_operand_eq(Operand *a, Operand *b) {
   }
 }
 
-void terms_add_operand(DynArr *terms, Operand op, int sign) {
-  for (int i = 0; i < terms->item_cnts; i++) {
-    ExprTerm *term = da_get(terms, i);
-    if (term->typ == EXPR_TERM_OPERAND && is_operand_eq(&term->operand, &op)) {
-      term->coefficient += sign;
+void terms_add_operand(DynArr *op_terms, Operand op, int sign) {
+  OperandTerm *op_term = op_terms->items;
+  for (int i = 0; i < op_terms->item_cnts; i++, op_term++) {
+    if (is_operand_eq(&op_term->operand, &op)) {
+      op_term->coefficient += sign;
       if (op.typ == OPERAND_ARR_ELEM) {
-        da_free(&op.idx_expr.terms);
+        da_free(&op.idx_expr.op_terms);
       }
       return;
     }
   }
-  ExprTerm *term = da_try_push_back(terms);
-  term->coefficient = sign;
-  term->typ = EXPR_TERM_OPERAND;
-  term->operand = op;
+  op_term = da_try_push_back(op_terms);
+  op_term->coefficient = sign;
+  op_term->operand = op;
   return;
 }
 
@@ -251,8 +228,8 @@ static int is_expr_end(Parser *parser) {
 }
 
 void parse_expr(Parser *parser, Expr *expr) {
-  da_init(&expr->terms, sizeof(ExprTerm), 8);
-  DynArr *terms = &expr->terms;
+  da_init(&expr->op_terms, sizeof(OperandTerm), 4);
+  DynArr *op_terms = &expr->op_terms;
   int const_val = 0;
   short sign = 1;
 
@@ -273,14 +250,9 @@ void parse_expr(Parser *parser, Expr *expr) {
     }
     Operand op;
     parse_operand(parser, &op);
-    terms_add_operand(terms, op, sign);
+    terms_add_operand(op_terms, op, sign);
   }
-  if (const_val != 0 || terms->item_cnts == 0) {
-    ExprTerm *const_term = da_try_push_back(terms);
-    const_term->coefficient = 1;
-    const_term->typ = EXPR_TERM_CONST;
-    const_term->constant = const_val;
-  }
+  expr->constant = const_val;
 }
 
 void parse_cond(Parser *parser, Cond *cond) {
@@ -432,7 +404,7 @@ static void printf_indent(int indent, const char *fmt, ...) {
 void debug_expr(Expr *expr);
 
 void debug_operand(Operand *operand) {
-  printf("#%zu", operand->decl_idx);
+  printf("#%d", operand->decl_idx);
   switch (operand->typ) {
   case OPERAND_INT_VAR:
     break;
@@ -445,23 +417,15 @@ void debug_operand(Operand *operand) {
 }
 
 void debug_expr(Expr *expr) {
-  DynArr *terms = &expr->terms;
-  for (int i = 0; i < terms->item_cnts; i++) {
-    ExprTerm *term = da_get(terms, i);
-    // if (term->coefficient == -1) {
-    //   printf("-");
-    // } else if (i > 0) {
-    //   printf("+");
-    // }
-    printf("%+d*", term->coefficient);
-    switch (term->typ) {
-    case EXPR_TERM_CONST:
-      printf("%d", term->constant);
-      break;
-    case EXPR_TERM_OPERAND:
-      debug_operand(&term->operand);
-      break;
-    }
+  DynArr *op_terms = &expr->op_terms;
+  OperandTerm *op_term = op_terms->items;
+
+  if (expr->constant != 0 || expr->op_terms.item_cnts == 0)
+    printf("%+d", expr->constant);
+
+  for (int i = 0; i < op_terms->item_cnts; i++, op_term++) {
+    printf("%+d*", op_term->coefficient);
+    debug_operand(&op_term->operand);
   }
 }
 

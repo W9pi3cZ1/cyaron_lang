@@ -23,7 +23,7 @@ endif
 ifneq ($(SANITIZER),)
 C_CONFIG += -fsanitize=leak
 endif
-C_FLAGS := -Iinclude -MMD -O3 -g3 $(C_CONFIG)
+C_FLAGS := -Iinclude -MMD -O2 -g3 $(C_CONFIG)
 LD := $(CC)
 LD_FLAGS := $(C_FLAGS) -fuse-linker-plugin -fuse-ld=lld
 
@@ -38,7 +38,9 @@ info:
 	$(Q)printf "DEBUG=$(DEBUG) CLOCK=$(CLOCK) C_FLAGS=$(C_FLAGS)"
 
 gen_min_impl:
-	$(V)$(LD) -E -P -DNO_STD_INC -DNO_DEBUG -DNO_CLOCK $(C_FLAGS) $(C_SOURCES)
+	$(Q)sed -n '/#ifndef NO_STD_INC/{:a;n;/#endif/!{p;ba};}' $(C_SOURCES) $(HEADER_SOURCES) | awk '!seen[$$0]++'
+	$(Q)$(CC) -E -P -DNO_STD_INC -DNO_CUSTOM_INC -DNO_DEBUG -DNO_CLOCK $(C_FLAGS) $(HEADER_SOURCES)
+	$(Q)$(CC) -E -P -DNO_STD_INC -DNO_CUSTOM_INC -DNO_DEBUG -DNO_CLOCK $(C_FLAGS) $(C_SOURCES)
 
 $(BUILD_DIR)/cyaron_once: 
 	$(V)$(CC) $(C_FLAGS) $(LD_FLAGS) -o $@ $(C_SOURCES)

@@ -1,5 +1,7 @@
 
+#ifndef NO_CUSTOM_INC
 #include "utils.h"
+#endif
 
 #ifndef NO_STD_INC
 #include <stdarg.h>
@@ -101,9 +103,8 @@ StrPool *str_pool_create(size_t mempool_size, size_t capacity) {
 }
 
 void str_pool_free(StrPool *str_pool) {
-  StrPoolNode *node;
-  for (size_t i = 0; i < str_pool->pool_nodes.item_cnts; i++) {
-    node = da_get(&str_pool->pool_nodes, i);
+  StrPoolNode *node = str_pool->pool_nodes.items;
+  for (size_t i = 0; i < str_pool->pool_nodes.item_cnts; i++, node++) {
     if (!node->alloc_by_pool) {
       free(node->str);
     }
@@ -116,8 +117,8 @@ char *str_pool_intern(StrPool *str_pool, const char *string, size_t len) {
   StrPoolNode *dest_node = NULL;
   size_t str_node_cnts = str_pool->pool_nodes.item_cnts;
   // Check if exist
-  for (size_t i = 0; i < str_node_cnts; i++) {
-    dest_node = da_get(&str_pool->pool_nodes, i);
+  dest_node = str_pool->pool_nodes.items;
+  for (size_t i = 0; i < str_node_cnts; i++, dest_node++) {
     if (dest_node->len == len && (strncmp(dest_node->str, string, len) == 0)) {
       return dest_node->str;
     }

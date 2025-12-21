@@ -1,6 +1,8 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
+#pragma once
+
 #ifndef NO_STD_INC
 #include <stddef.h>
 #include <stdio.h>

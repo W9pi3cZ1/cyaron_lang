@@ -1,7 +1,9 @@
+#ifndef NO_CUSTOM_INC
 #include "interpreter.h"
 #include "lexer.h"
 #include "parser.h"
 #include "utils.h"
+#endif
 
 #ifndef NO_STD_INC
 #include <stddef.h>
@@ -11,8 +13,8 @@
 #endif
 
 void var_decls_init_data(DynArr *var_decls) {
-  for (int i = 0; i < var_decls->item_cnts; i++) {
-    VarDecl *var_decl = da_get(var_decls, i);
+  VarDecl *var_decl = var_decls->items;
+  for (int i = 0; i < var_decls->item_cnts; i++, var_decl++) {
     switch (var_decl->typ) {
     case VAR_INT: {
       VarIntData *int_data = &var_decl->data.i;
@@ -28,8 +30,8 @@ void var_decls_init_data(DynArr *var_decls) {
 }
 
 void var_decls_free_data(DynArr *var_decls) {
-  for (int i = 0; i < var_decls->item_cnts; i++) {
-    VarDecl *var_decl = da_get(var_decls, i);
+  VarDecl *var_decl = var_decls->items;
+  for (int i = 0; i < var_decls->item_cnts; i++, var_decl++) {
     switch (var_decl->typ) {
     case VAR_INT:
       break;
@@ -57,36 +59,36 @@ void interpreter_free(Interpreter *interpreter) {
 
 int eval_expr(Interpreter *interpreter, Expr *expr);
 
-static int *operand_get_ref(Interpreter *interpreter, Operand *operand) {
+__attribute__((noinline)) // Keep it noinline
+static int
+compute_array_index(Interpreter *interpreter, Expr *idx_expr, int start) {
+  int idx_res = eval_expr(interpreter, idx_expr);
+  // if (idx_res > decl->end || idx_res < decl->start) {
+  //   err_log("Index(%d) of Array(#%zu) is Out of Bounds (in %s)\n", idx_res,
+  //           operand->decl_idx, __FUNCTION__);
+  // }
+  return idx_res - start;
+}
+
+int *operand_get_ref(Interpreter *interpreter, Operand *operand) {
   size_t decl_idx = operand->decl_idx;
-  VarDecl *decl = da_get(interpreter->var_decls, decl_idx);
-  switch (operand->typ) {
-  case OPERAND_INT_VAR:
+  VarDecl *decl = (VarDecl *)(interpreter->var_decls->items) + decl_idx;
+  if (operand->typ == OPERAND_INT_VAR) {
     return &decl->data.i.val;
-  case OPERAND_ARR_ELEM: {
-    int idx_res = eval_expr(interpreter, &operand->idx_expr);
-    // if (idx_res > decl->end || idx_res < decl->start) {
-    //   err_log("Index(%d) of Array(#%zu) is Out of Bounds (in %s)\n", idx_res,
-    //           operand->decl_idx, __FUNCTION__);
-    // }
-    return &decl->data.a.arr[idx_res - decl->start];
-  }
-  default:
-    // err_log("Operand(#%zu) isn't supported (in %s)\n", operand->decl_idx,
-    // __FUNCTION__);
-    return NULL;
+  } else { // OPERAND_ARR_ELEM
+    int idx = compute_array_index(interpreter, &operand->idx_expr, decl->start);
+    return &decl->data.a.arr[idx];
   }
 }
 
-inline void operand_write(Interpreter *interpreter, Operand *operand,
-                          int data) {
+void operand_write(Interpreter *interpreter, Operand *operand, int data) {
 #ifndef NO_DEBUG
   interpreter->stats.operand_write++;
 #endif
   *operand_get_ref(interpreter, operand) = data;
 }
 
-inline int operand_read(Interpreter *interpreter, Operand *operand) {
+int operand_read(Interpreter *interpreter, Operand *operand) {
 #ifndef NO_DEBUG
   interpreter->stats.operand_read++;
 #endif
@@ -97,63 +99,37 @@ int eval_expr(Interpreter *interpreter, Expr *expr) {
 #ifndef NO_DEBUG
   interpreter->stats.expression_eval++;
 #endif
-  DynArr *terms = &expr->terms;
-  int res = 0;
-  for (int i = 0; i < terms->item_cnts; i++) {
-    ExprTerm *term = da_get(terms, i);
-    switch (term->typ) {
-    case EXPR_TERM_OPERAND:
-      res += term->coefficient * operand_read(interpreter, &term->operand);
-      break;
-    case EXPR_TERM_CONST:
-      res += term->coefficient * term->constant;
-      break;
-    }
+  DynArr *op_terms = &expr->op_terms;
+  int res = expr->constant;
+  OperandTerm *op_term = op_terms->items;
+  for (int i = 0; i < op_terms->item_cnts; ++i, ++op_term) {
+    int val = op_term->coefficient;
+    val *= operand_read(interpreter, &op_term->operand);
+    res += val;
   }
   return res;
 }
 
 void execute_stmts(Interpreter *interpreter, DynArr *stmts);
 
-char assign_cond_old(enum TokType cond_typ, int left, int right) {
-  switch (cond_typ) {
-  case TOK_CMP_LT:
-    return left < right;
-  case TOK_CMP_GT:
-    return left > right;
-  case TOK_CMP_LE:
-    return left <= right;
-  case TOK_CMP_GE:
-    return left >= right;
-  case TOK_CMP_EQ:
-    return left == right;
-  case TOK_CMP_NEQ:
-    return left != right;
-  default:
-    return 0;
-  }
-}
-
-char assign_cond(enum TokType cond_typ, int left, int right) {
+inline char assign_cond(enum TokType cond_typ, int left, int right) {
   cond_typ -= TOK_CMP_LT;
-  unsigned int lt = (unsigned int)(left < right);
-  unsigned int eq = (unsigned int)(left == right);
-  unsigned int gt = (unsigned int)(left > right);
+  if (cond_typ < 0 || cond_typ >= 6)
+    return 0;
 
-  static const char result_table[6] = {
-      0b001, // TOK_CMP_LT: lt
-      0b100, // TOK_CMP_GT: gt
-      0b011, // TOK_CMP_LE: lt || eq
-      0b110, // TOK_CMP_GE: gt || eq
-      0b010, // TOK_CMP_EQ: eq
-      0b101  // TOK_CMP_NEQ: lt || gt
+  int lt = (left < right);
+  int gt = (left > right);
+
+  const char results[] = {
+      lt,       // TOK_CMP_LT
+      gt,       // TOK_CMP_GT
+      lt || gt, // TOK_CMP_NEQ
   };
-
-  if (cond_typ >= 0 && cond_typ < 6) {
-    unsigned int mask = result_table[cond_typ];
-    return (lt & mask) | (eq & (mask >> 1)) | (gt & (mask >> 2));
-  }
-  return 0;
+  // !lt, // TOK_CMP_GE
+  // !gt, // TOK_CMP_LE
+  // !(lt || gt), // TOK_CMP_EQ
+  return results[cond_typ % 3] ^ (cond_typ >= 3);
+  // return cond_typ >= 3 ? !results[cond_typ - 3] : results[cond_typ];
 }
 
 char execute_cond(Interpreter *interpreter, Cond *cond) {
@@ -162,46 +138,61 @@ char execute_cond(Interpreter *interpreter, Cond *cond) {
   return assign_cond(cond->typ, left, right);
 }
 
-void execute_stmt(Interpreter *interpreter, Stmt *stmt) {
-  switch (stmt->typ) {
-  case STMT_IHU_BLK: {
-    IhuStmt *ihu = &stmt->inner.ihu;
-    if (execute_cond(interpreter, &ihu->cond)) {
-      execute_stmts(interpreter, &ihu->stmts);
-    }
-  } break;
-  case STMT_WHILE_BLK: {
-    WhileStmt *while_stmt = &stmt->inner.while_stmt;
-    while (execute_cond(interpreter, &while_stmt->cond)) {
-      execute_stmts(interpreter, &while_stmt->stmts);
-    }
-  } break;
-  case STMT_HOR_BLK: {
-    HorStmt *hor = &stmt->inner.hor;
-    int start = eval_expr(interpreter, &hor->start);
-    int end = eval_expr(interpreter, &hor->end);
-    for (int i = start; i <= end; i++) {
-      operand_write(interpreter, &hor->var, i);
-      execute_stmts(interpreter, &hor->stmts);
-    }
-  } break;
-  case STMT_YOSORO_CMD: {
-    YosoroStmt *yosoro = &stmt->inner.yosoro;
-    int res = eval_expr(interpreter, &yosoro->expr);
-    printf("%d ", res);
-  } break;
-  case STMT_SET_CMD: {
-    SetStmt *set = &stmt->inner.set;
-    int res = eval_expr(interpreter, &set->expr);
-    operand_write(interpreter, &set->operand, res);
-  } break;
+typedef void (*StmtHandler)(Interpreter *interpreter, Stmt *stmt);
+
+static void execute_yosoro(Interpreter *interpreter, Stmt *stmt) {
+  YosoroStmt *yosoro = &stmt->inner.yosoro;
+  int res = eval_expr(interpreter, &yosoro->expr);
+  printf("%d ", res);
+}
+
+static void execute_set(Interpreter *interpreter, Stmt *stmt) {
+  SetStmt *set = &stmt->inner.set;
+  int res = eval_expr(interpreter, &set->expr);
+  operand_write(interpreter, &set->operand, res);
+}
+
+static void execute_ihu(Interpreter *interpreter, Stmt *stmt) {
+  IhuStmt *ihu = &stmt->inner.ihu;
+  Cond *cond = &ihu->cond;
+  DynArr *stmts = &ihu->stmts;
+  if (!execute_cond(interpreter, cond))
+    return;
+  execute_stmts(interpreter, stmts);
+}
+
+static void execute_while(Interpreter *interpreter, Stmt *stmt) {
+  WhileStmt *while_stmt = &stmt->inner.while_stmt;
+  Cond *cond = &while_stmt->cond;
+  DynArr *stmts = &while_stmt->stmts;
+  while (execute_cond(interpreter, cond)) {
+    execute_stmts(interpreter, stmts);
   }
 }
 
-void execute_stmts(Interpreter *interpreter, DynArr *stmts) {
-  Stmt *stmt;
-  for (int i = 0; i < stmts->item_cnts; i++) {
-    stmt = da_get(stmts, i);
+static void execute_hor(Interpreter *interpreter, Stmt *stmt) {
+  HorStmt *hor = &stmt->inner.hor;
+  int start = eval_expr(interpreter, &hor->start);
+  int end = eval_expr(interpreter, &hor->end);
+  Operand *var = &hor->var;
+  DynArr *stmts = &hor->stmts;
+  for (int i = start; i <= end; i++) {
+    operand_write(interpreter, var, i);
+    execute_stmts(interpreter, stmts);
+  }
+}
+
+void execute_stmt(Interpreter *interpreter, Stmt *stmt) {
+  static StmtHandler handlers[] = {
+      execute_ihu, execute_while, execute_hor, execute_yosoro, execute_set,
+  };
+  StmtHandler handler = handlers[stmt->typ];
+  handler(interpreter, stmt);
+}
+
+inline void execute_stmts(Interpreter *interpreter, DynArr *stmts) {
+  Stmt *stmt = stmts->items;
+  for (int i = 0; i < stmts->item_cnts; i++, stmt++) {
     execute_stmt(interpreter, stmt);
   }
 }
