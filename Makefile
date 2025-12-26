@@ -23,6 +23,9 @@ endif
 ifneq ($(SANITIZER),)
 C_CONFIG += -fsanitize=leak
 endif
+ifneq ($(CODEGEN),)
+C_CONFIG += -DCODEGEN
+endif
 C_FLAGS := -Iinclude -MMD -O2 -g3 $(C_CONFIG)
 LD := $(CC)
 LD_FLAGS := $(C_FLAGS) -fuse-linker-plugin -fuse-ld=lld

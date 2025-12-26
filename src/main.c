@@ -1,7 +1,17 @@
 #ifndef NO_CUSTOM_INC
-#include "interpreter.h"
 #include "lexer.h"
 #include "parser.h"
+#endif
+
+#ifdef CODEGEN
+#ifndef NO_CUSTOM_INC
+#include "codegen.h"
+#include "vm.h"
+#endif
+#else
+#ifndef NO_CUSTOM_INC
+#include "interpreter.h"
+#endif
 #endif
 
 #ifndef NO_STD_INC
@@ -11,20 +21,43 @@
 #include <time.h>
 #endif
 
+// void read_src(char **src) {
+//   FILE *input = stdin;
+//   size_t capacity = 32;
+//   *src = malloc(capacity);
+//   size_t input_size = 0;
+//   while (!feof(input)) {
+//     if (input_size >= capacity) {
+//       capacity *= 2;
+//       *src = realloc(*src, capacity);
+//     }
+//     (*src)[input_size] = fgetc(input);
+//     input_size++;
+//   }
+//   (*src)[input_size - 1] = '\0'; // Replace EOF
+// }
+
 void read_src(char **src) {
   FILE *input = stdin;
-  size_t capacity = 32;
+  size_t capacity = 256;
   *src = malloc(capacity);
-  size_t input_size = 0;
-  while (!feof(input)) {
-    if (input_size >= capacity) {
+  // if (*src == NULL) return;
+  size_t total_read = 0;
+  while (1) {
+    size_t remaining = capacity - total_read - 1;
+    if (remaining == 0) {
       capacity *= 2;
       *src = realloc(*src, capacity);
+      // if (*src == NULL) return;
+      remaining = capacity - total_read - 1;
     }
-    (*src)[input_size] = fgetc(input);
-    input_size++;
+    size_t nread = fread(*src + total_read, 1, remaining, input);
+    total_read += nread;
+    if (nread < remaining) {
+      break;
+    }
   }
-  (*src)[input_size - 1] = '\0'; // Replace EOF
+  (*src)[total_read] = '\0';
 }
 
 #ifndef NO_CLOCK
@@ -39,9 +72,13 @@ void read_src(char **src) {
 #endif
 
 void test() {
+
+#ifndef NO_CLOCK
   clock_t start_time;
   clock_t end_time;
   size_t time_spent;
+#endif
+
   char *src;
   CLOCK_FUNC(start_time, end_time, time_spent, read_src, &src);
   Lexer lexer;
@@ -58,6 +95,22 @@ void test() {
 #ifndef NO_DEBUG
   debug_parser(&parser);
 #endif
+
+#ifdef CODEGEN
+
+  CodeGen cg;
+  cg_init(&cg, &parser.stmts, &parser.var_decls);
+  CLOCK_FUNC(start_time, end_time, time_spent, cg_gen, &cg);
+  cg_gen(&cg);
+#ifndef NO_DEBUG
+  cg_debug(&cg);
+#endif
+  CyrVM cyr_vm;
+  cyr_vm_init(&cyr_vm, &parser.var_decls, &cg.codes);
+  CLOCK_FUNC(start_time, end_time, time_spent, cyr_vm_execute, &cyr_vm);
+
+#else
+
   Interpreter interpreter;
   interpreter_init(&interpreter, &parser.stmts, &parser.var_decls);
   // interpreter_execute(interpreter);
@@ -67,18 +120,25 @@ void test() {
   interpreter_stats(&interpreter);
 #endif
   interpreter_free(&interpreter);
+
+#endif
   parser_free(&parser);
   lexer_free(&lexer);
   free(src);
 }
 
 int main() {
-  //   FILE *log = fopen("log.txt", "w");
-  //   set_glob_log_output(log);
-  // printf("CYaRon!!\n");
+
+#ifndef NO_CLOCK
   clock_t start_time;
   clock_t end_time;
   size_t time_spent;
+#endif
+
+  //   FILE *log = fopen("log.txt", "w");
+  //   set_glob_log_output(log);
+  // printf("CYaRon!!\n");
+
   CLOCK_FUNC(start_time, end_time, time_spent, test);
   //   fclose(log);
   return 0;

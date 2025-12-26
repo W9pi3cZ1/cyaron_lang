@@ -73,6 +73,13 @@ void free_stmts(DynArr *stmts) {
 }
 
 void parser_free(Parser *parser) {
+  VarDecl *var_decl = parser->var_decls.items;
+  for (int i = 0; i < parser->var_decls.item_cnts; i++, var_decl++) {
+    if (var_decl->typ == VAR_ARR) {
+      VarArrData *arr_data = &var_decl->data.a;
+      free(arr_data->arr);
+    }
+  }
   free_stmts(&parser->stmts);
   da_free(&parser->var_decls);
 }
@@ -118,10 +125,14 @@ void parse_vars(Parser *parser) {
     consume_token(parser);             // :
     VarDecl *decl = da_try_push_back(var_decls);
     decl->name = ident->str;
+    decl->decl_idx = var_decls->item_cnts - 1;
     if (match_token(parser, TOK_KEYWORD_INT)) {
       consume_token(parser); // int
       decl->typ = VAR_INT;
-    } else if (match_token(parser, TOK_KEYWORD_ARRAY)) {
+      decl->data.i.val = 0;
+    } else
+    //  if (match_token(parser, TOK_KEYWORD_ARRAY))
+    {
       consume_token(parser); // array
       consume_token(parser); // [
       consume_token(parser); // int
@@ -130,6 +141,7 @@ void parse_vars(Parser *parser) {
       decl->start = atoi(next_token(parser)->str);
       consume_token(parser); // ..
       decl->end = atoi(next_token(parser)->str);
+      decl->data.a.arr = calloc(decl->end - decl->start + 1, sizeof(int));
       consume_token(parser); // ]
     } // else ERR!
   }
@@ -139,8 +151,8 @@ void parse_vars(Parser *parser) {
 void parse_blk(Parser *parser, DynArr *stmts);
 void parse_expr(Parser *parser, Expr *expr);
 
-size_t operand_finder(Parser *parser, const char *var_name,
-                      enum OperandTyp type) {
+unsigned short operand_finder(Parser *parser, const char *var_name,
+                              enum OperandTyp type) {
   VarDecl *decl = parser->var_decls.items;
   for (int i = 0; i < parser->var_decls.item_cnts; i++, decl++) {
     if (decl->name == var_name
@@ -151,13 +163,13 @@ size_t operand_finder(Parser *parser, const char *var_name,
       return i;
     }
   }
-  return (size_t)-1;
+  return (unsigned short)-1;
 }
 
 void parse_operand(Parser *parser, Operand *operand) {
   Token *operand_tok = current_token(parser);
   consume_token(parser); // var_name
-  operand->decl_expand = UNEXPANDED;
+  // operand->decl_expand = UNEXPANDED;
   operand->typ = OPERAND_INT_VAR;
   if (match_token(parser, TOK_LBRACKET)) {
     operand->typ = OPERAND_ARR_ELEM;
@@ -165,7 +177,13 @@ void parse_operand(Parser *parser, Operand *operand) {
     parse_expr(parser, &operand->idx_expr);
     consume_token(parser); // ]
   }
-  operand->decl_idx = operand_finder(parser, operand_tok->str, operand->typ);
+  unsigned short decl_idx =
+      operand_finder(parser, operand_tok->str, operand->typ);
+  operand->decl_idx = decl_idx;
+  // // Maybe unsafe (when there is
+  // // VARS block after this...)
+  // operand->decl_ptr = operand->decl_ptr =
+  //     (VarDecl *)(parser->var_decls.items) + decl_idx;
 }
 
 int is_operand_eq(Operand *a, Operand *b);
@@ -176,9 +194,9 @@ int is_expr_eq(Expr *a, Expr *b) {
   if (cnts != b->op_terms.item_cnts || a->constant != b->constant) {
     return 0;
   }
-  for (int i = 0; i < cnts; i++) {
-    OperandTerm *a_term = da_get(&a->op_terms, i);
-    OperandTerm *b_term = da_get(&b->op_terms, i);
+  OperandTerm *a_term = a->op_terms.items;
+  OperandTerm *b_term = b->op_terms.items;
+  for (int i = 0; i < cnts; i++, ++a_term, ++b_term) {
     if (!is_operand_eq(&a_term->operand, &b_term->operand))
       return 0;
   }
@@ -232,6 +250,38 @@ static int is_expr_end(Parser *parser) {
   }
 }
 
+static int compare_operand_terms(const void *a, const void *b) {
+  const OperandTerm *term_a = (const OperandTerm *)a;
+  const OperandTerm *term_b = (const OperandTerm *)b;
+  if (term_a->coefficient < term_b->coefficient) {
+    return 1;
+  } else if (term_a->coefficient > term_b->coefficient) {
+    return -1;
+  }
+  if (term_a->operand.decl_idx < term_b->operand.decl_idx) {
+    return -1;
+  } else if (term_a->operand.decl_idx > term_b->operand.decl_idx) {
+    return 1;
+  }
+  return 0;
+}
+
+void optimize_expr(Parser *parser, Expr *expr) {
+  if (expr->op_terms.item_cnts > 1) {
+    qsort(expr->op_terms.items, expr->op_terms.item_cnts, sizeof(OperandTerm),
+          compare_operand_terms);
+  }
+  // cut-off terms that coefficient=0
+  OperandTerm *op_term = expr->op_terms.items;
+  int end_i = 0;
+  for (end_i = 0; end_i < expr->op_terms.item_cnts; end_i++, op_term++) {
+    if (op_term->coefficient == 0) {
+      expr->op_terms.item_cnts = end_i;
+      break;
+    }
+  }
+}
+
 void parse_expr(Parser *parser, Expr *expr) {
   da_init(&expr->op_terms, sizeof(OperandTerm), 4);
   DynArr *op_terms = &expr->op_terms;
@@ -258,6 +308,7 @@ void parse_expr(Parser *parser, Expr *expr) {
     terms_add_operand(op_terms, op, sign);
   }
   expr->constant = const_val;
+  optimize_expr(parser, expr);
 }
 
 void parse_cond(Parser *parser, Cond *cond) {
@@ -410,7 +461,7 @@ static void printf_indent(int indent, const char *fmt, ...) {
 void debug_expr(Expr *expr);
 
 void debug_operand(Operand *operand) {
-  printf("#%d", operand->decl_idx);
+  printf("#%hd", operand->decl_idx);
   switch (operand->typ) {
   case OPERAND_INT_VAR:
     break;

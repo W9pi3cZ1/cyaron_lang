@@ -4,7 +4,6 @@
 #pragma once
 
 #ifndef NO_CUSTOM_INC
-#include "interpreter.h"
 #include "utils.h"
 #endif
 
@@ -20,22 +19,13 @@ enum OperandTyp {
 typedef struct Expr {
   DynArr op_terms; // OperandTerm *
   int constant;
-} Expr;         // Use Flatten Expression
+} Expr; // Use Flatten Expression
 
 typedef struct VarDecl VarDecl;
 
-enum MayExpand {
-  UNEXPANDED,
-  EXPANDED,
-};
-
 typedef struct Operand {
   enum OperandTyp typ;
-  enum MayExpand decl_expand;
-  union {
-    int decl_idx;
-    VarDecl *decl_ptr;
-  };
+  unsigned short decl_idx;
   union {
     Expr idx_expr; // for ArrElem
   };
@@ -60,12 +50,26 @@ enum VarType {
   VAR_ARR,
 };
 
+typedef struct VarIntData {
+  int val;
+} VarIntData;
+
+typedef struct VarArrData {
+  int *arr;
+} VarArrData;
+
+typedef union VarData {
+  VarIntData i;
+  VarArrData a;
+} VarData;
+
 typedef struct VarDecl {
   enum VarType typ;
-  union {
+  // union {
   VarData data;
   const char *name;
-  };
+  unsigned short decl_idx;
+  // };
   struct {
     int start;
     int end;
@@ -79,6 +83,27 @@ enum CmpType {
   CMP_GE = 0b101,
   CMP_LE = 0b110,
   CMP_EQ = 0b111,
+};
+
+static char do_cmp(enum CmpType cond_typ, int left, int right) {
+  // Assume it always within range ...
+  // if (cond_typ < 0 || cond_typ >= 6)
+  //   return 0;
+
+  // enum CmpType {
+  //   CMP_LT = 0b001,
+  //   CMP_GT = 0b010,
+  //   CMP_NEQ = 0b011,
+  //   CMP_GE = 0b101,
+  //   CMP_LE = 0b110,
+  //   CMP_EQ = 0b111,
+  // };
+
+  const char lt = (left < right) & cond_typ;
+  const char gt = (left > right) & (cond_typ >> 1);
+  const char cmp = lt | gt;
+  const char hi = cond_typ >> 2;
+  return cmp ^ hi;
 };
 
 typedef struct Cond {
@@ -131,11 +156,11 @@ typedef struct Parser {
   DynArr var_decls; // VarDecl *
 } Parser;
 
-void parser_init(Parser *parser,DynArr *toks);
+void parser_init(Parser *parser, DynArr *toks);
 Parser *parser_create(DynArr *toks);
 void parser_free(Parser *parser);
-size_t operand_finder(Parser *parser, const char *var_name,
-                      enum OperandTyp type);
+unsigned short operand_finder(Parser *parser, const char *var_name,
+                              enum OperandTyp type);
 DynArr *parser_parse(Parser *parser);
 #ifndef NO_DEBUG
 void debug_parser(Parser *parser);

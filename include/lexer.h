@@ -14,7 +14,7 @@
 enum TokType {
 #undef CYR_TOKS
 #define CYR_TOKS(x) x,
-#include "cyr_toks.def"
+#include "cyr_toks.h"
 #undef CYR_TOKS
 };
 

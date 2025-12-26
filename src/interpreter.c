@@ -12,43 +12,43 @@
 #include <string.h>
 #endif
 
-void var_decls_init_data(DynArr *var_decls) {
-  VarDecl *var_decl = var_decls->items;
-  for (int i = 0; i < var_decls->item_cnts; i++, var_decl++) {
-    switch (var_decl->typ) {
-    case VAR_INT: {
-      VarIntData *int_data = &var_decl->data.i;
-      int_data->val = 0;
-    } break;
-    case VAR_ARR: {
-      VarArrData *arr_data = &var_decl->data.a;
-      arr_data->arr =
-          malloc((var_decl->end - var_decl->start + 1) * sizeof(int));
-    } break;
-    }
-  }
-}
+// void var_decls_init_data(DynArr *var_decls) {
+//   VarDecl *var_decl = var_decls->items;
+//   for (int i = 0; i < var_decls->item_cnts; i++, var_decl++) {
+//     switch (var_decl->typ) {
+//     case VAR_INT: {
+//       VarIntData *int_data = &var_decl->data.i;
+//       int_data->val = 0;
+//     } break;
+//     case VAR_ARR: {
+//       VarArrData *arr_data = &var_decl->data.a;
+//       arr_data->arr =
+//           malloc((var_decl->end - var_decl->start + 1) * sizeof(int));
+//     } break;
+//     }
+//   }
+// }
 
-void var_decls_free_data(DynArr *var_decls) {
-  VarDecl *var_decl = var_decls->items;
-  for (int i = 0; i < var_decls->item_cnts; i++, var_decl++) {
-    switch (var_decl->typ) {
-    case VAR_INT:
-      break;
-    case VAR_ARR: {
-      VarArrData *arr_data = &var_decl->data.a;
-      free(arr_data->arr);
-    } break;
-    }
-  }
-}
+// void var_decls_free_data(DynArr *var_decls) {
+//   VarDecl *var_decl = var_decls->items;
+//   for (int i = 0; i < var_decls->item_cnts; i++, var_decl++) {
+//     switch (var_decl->typ) {
+//     case VAR_INT:
+//       break;
+//     case VAR_ARR: {
+//       VarArrData *arr_data = &var_decl->data.a;
+//       free(arr_data->arr);
+//     } break;
+//     }
+//   }
+// }
 
 void interpreter_init(Interpreter *interpreter, DynArr *stmts,
                       DynArr *var_decls) {
   memset(interpreter, 0, sizeof(Interpreter));
   interpreter->stmts = stmts;
   // interpreter->exec_ptr = 0;
-  var_decls_init_data(var_decls);
+  // var_decls_init_data(var_decls);
   interpreter->var_decls = var_decls;
 }
 
@@ -59,14 +59,14 @@ Interpreter *interpreter_create(DynArr *stmts, DynArr *var_decls) {
 }
 
 void interpreter_free(Interpreter *interpreter) {
-  var_decls_free_data(interpreter->var_decls);
+  // var_decls_free_data(interpreter->var_decls);
 }
 
 int eval_expr(Interpreter *interpreter, Expr *expr);
 
 __attribute__((noinline)) // Keep it noinline
-static int
-compute_array_index(Interpreter *interpreter, Expr *idx_expr, int start) {
+static int compute_array_index(Interpreter *interpreter, Expr *idx_expr,
+                               int start) {
   int idx_res = eval_expr(interpreter, idx_expr);
   // if (idx_res > decl->end || idx_res < decl->start) {
   //   err_log("Index(%d) of Array(#%zu) is Out of Bounds (in %s)\n", idx_res,
@@ -76,18 +76,14 @@ compute_array_index(Interpreter *interpreter, Expr *idx_expr, int start) {
 }
 
 int *operand_get_ref(Interpreter *interpreter, Operand *operand) {
-  if (operand->decl_expand == UNEXPANDED) {
-    size_t decl_idx = operand->decl_idx;
-    operand->decl_ptr = (VarDecl *)(interpreter->var_decls->items) + decl_idx;
-    operand->decl_expand = EXPANDED;
-  }
-  VarDecl *decl = operand->decl_ptr;
+  VarDecl *decl =
+      (VarDecl *)(interpreter->var_decls->items) + operand->decl_idx;
   if (operand->typ == OPERAND_INT_VAR) {
     return &decl->data.i.val;
-  } else { // OPERAND_ARR_ELEM
-    int idx = compute_array_index(interpreter, &operand->idx_expr, decl->start);
-    return &decl->data.a.arr[idx];
   }
+  // else OPERAND_ARR_ELEM
+  int idx = compute_array_index(interpreter, &operand->idx_expr, decl->start);
+  return &decl->data.a.arr[idx];
 }
 
 void operand_write(Interpreter *interpreter, Operand *operand, int data) {
@@ -112,40 +108,18 @@ int eval_expr(Interpreter *interpreter, Expr *expr) {
   int res = expr->constant;
   OperandTerm *op_term = op_terms->items;
   for (int i = 0; i < op_terms->item_cnts; ++i, ++op_term) {
-    int val = op_term->coefficient;
-    val *= operand_read(interpreter, &op_term->operand);
-    res += val;
+    int val = operand_read(interpreter, &op_term->operand);
+    res += val * op_term->coefficient;
   }
   return res;
 }
 
 void execute_stmts(Interpreter *interpreter, DynArr *stmts);
 
-inline char assign_cond(enum CmpType cond_typ, int left, int right) {
-  // Assume it always within range ...
-  // if (cond_typ < 0 || cond_typ >= 6)
-  //   return 0;
-
-  // enum CmpType {
-  //   CMP_LT = 0b001,
-  //   CMP_GT = 0b010,
-  //   CMP_NEQ = 0b011,
-  //   CMP_GE = 0b101,
-  //   CMP_LE = 0b110,
-  //   CMP_EQ = 0b111,
-  // };
-
-  const char lt = left < right;
-  const char gt = left > right;
-  const char hi = cond_typ >> 2;
-
-  return (((lt | gt << 1) & cond_typ) && 1) ^ hi;
-}
-
 char execute_cond(Interpreter *interpreter, Cond *cond) {
   int left = eval_expr(interpreter, &cond->left);
   int right = eval_expr(interpreter, &cond->right);
-  return assign_cond(cond->typ, left, right);
+  return do_cmp(cond->typ, left, right);
 }
 
 typedef void (*StmtHandler)(Interpreter *interpreter, Stmt *stmt);

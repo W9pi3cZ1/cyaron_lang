@@ -17,7 +17,7 @@ const char *debug_token_type(enum TokType tok_type) {
 #define CYR_TOKS(x)                                                            \
   case x:                                                                      \
     return #x;
-#include "cyr_toks.def"
+#include "cyr_toks.h"
 #undef CYR_TOKS
   default:
     return "<Invalid>";
@@ -91,10 +91,10 @@ const struct KeyWords {
     KEYWORD(TOK_KEYWORD_ARRAY, "array"),
     KEYWORD(TOK_CMP_LT, "lt"),
     KEYWORD(TOK_CMP_GT, "gt"),
-    KEYWORD(TOK_CMP_LE, "le"),
-    KEYWORD(TOK_CMP_GE, "ge"),
-    KEYWORD(TOK_CMP_EQ, "eq"),
     KEYWORD(TOK_CMP_NEQ, "neq"),
+    KEYWORD(TOK_CMP_GE, "ge"),
+    KEYWORD(TOK_CMP_LE, "le"),
+    KEYWORD(TOK_CMP_EQ, "eq"),
 };
 
 const size_t keyword_cnts = sizeof(keywords) / sizeof(*keywords);
