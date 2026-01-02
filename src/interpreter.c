@@ -1,3 +1,5 @@
+#ifndef CODEGEN
+
 #ifndef NO_CUSTOM_INC
 #include "interpreter.h"
 #include "parser.h"
@@ -197,4 +199,6 @@ void interpreter_stats(Interpreter *interpreter) {
          "  Eval : %zu\n",
          stats.operand_read, stats.operand_write, stats.expression_eval);
 }
+#endif
+
 #endif

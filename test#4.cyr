@@ -1,0 +1,17 @@
+{ vars
+    a:array[int, 0..5]
+    b:array[int, 50000..50005]
+}
+
+:set a[0], -1
+:set a[5], 4
+:set b[50002], 3
+:set b[50005], -1
+
+:set a[2], a[0]-b[50002]
+:set b[50003], a[5] - b[50005]
+:set a[3], a[2] - b[50003]
+
+:yosoro a[2]
+:yosoro a[3]
+:yosoro b[50003] - b[50005]

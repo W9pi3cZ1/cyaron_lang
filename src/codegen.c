@@ -1,10 +1,12 @@
-#include "lexer.h"
-#include "parser.h"
-#include <stdio.h>
+#ifdef CODEGEN
+
+#ifndef NO_STD_INC
 #include <stdlib.h>
+#endif
+
 #ifndef NO_CUSTOM_INC
 #include "codegen.h"
-// #include "parser.h"
+#include "parser.h"
 #include "utils.h"
 #endif
 
@@ -184,62 +186,155 @@ void gen_store_operand(CodeGen *cg, Operand *operand) {
 }
 
 void gen_expr(CodeGen *cg, Expr *expr) {
-  // 保证系数都不为0，而且项的系数从高到低排
+  // 保证项的系数从高到低排
   OperandTerm *op_term = expr->op_terms.items;
 
   int term_count = expr->op_terms.item_cnts;
   if (!term_count) {
     gen_load_const(cg, expr->constant);
-    return; // 所有项系数都为0
+    return; // 空表达式
   }
 
+  // 首先处理常数部分
   if (expr->constant != 0) {
     gen_load_const(cg, expr->constant);
   }
 
-  // 分组处理相同系数的项
-  int current_coeff = op_term->coefficient;
-  int group_start = 0;
   int has_constant_on_stack = (expr->constant != 0) ? 1 : 0;
   int stack_items = has_constant_on_stack;
 
-  for (int i = 0; i <= term_count; i++) {
-    // 检测系数变化或到达末尾
-    int coeff_changed = (op_term[i].coefficient != current_coeff);
+  // 先跳过所有系数为0的项，找到第一个非零系数的项
+  int start = 0;
+  while (start < term_count && op_term[start].coefficient == 0) {
+    start++;
+  }
 
-    if (i < term_count) {
-      gen_load_operand(cg, &op_term[i].operand);
-      stack_items++;
-    }
+  if (start == term_count) {
+    // 所有项的系数都是0，只有常数部分（如果存在）
+    return;
+  }
 
-    if (!coeff_changed || i < term_count)
+  // 按系数分组处理
+  int current_coeff = op_term[start].coefficient;
+  int group_start = start;
+  int group_size = 0;
+
+  for (int i = start; i < term_count; i++) {
+    // 跳过系数为0的项
+    if (op_term[i].coefficient == 0) {
       continue;
-
-    int group_size = i - group_start;
-
-    if (current_coeff == 1) {
-      if (stack_items > 1)
-        gen_adds(cg, stack_items);
-      stack_items = 1;
-    } else {
-      // 处理组内加法（如果组内有多个项）
-      if (group_size > 1) {
-        gen_adds(cg, group_size);
-        stack_items -= (group_size - 1); // 合并为1项
-      }
-      // 处理系数乘法（如果系数不是1）
-      gen_cmul(cg, current_coeff);
     }
 
-    // 准备下一个分组
-    if (i < term_count) {
-      current_coeff = op_term[i].coefficient;
-      group_start = i;
+    // 检查系数是否变化
+    if (op_term[i].coefficient != current_coeff) {
+      // 处理当前分组
+      if (group_size > 0) {
+        // 生成当前分组的加法（如果有多项）
+        if (group_size > 1) {
+          gen_adds(cg, group_size);
+          stack_items -= (group_size - 1); // 合并后减少栈项数
+        }
+
+        // 处理系数乘法（如果系数不是1或-1）
+        if (current_coeff != 1) {
+          gen_cmul(cg, current_coeff);
+          // 乘法消耗2个操作数，产生1个结果，栈项数不变
+        }
+        // 系数为1时不需要乘法
+
+        // 重置分组
+        group_start = i;
+        group_size = 0;
+        current_coeff = op_term[i].coefficient;
+      }
+    }
+
+    // 加载当前操作数
+    gen_load_operand(cg, &op_term[i].operand);
+    stack_items++;
+    group_size++;
+  }
+
+  // 处理最后一组
+  if (group_size > 0) {
+    // 生成当前分组的加法（如果有多项）
+    if (group_size > 1) {
+      gen_adds(cg, group_size);
+      stack_items -= (group_size - 1);
+    }
+
+    // 处理系数乘法
+    if (current_coeff != 1 && current_coeff != -1) {
+      gen_cmul(cg, current_coeff);
+    } else if (current_coeff == -1) {
+      gen_cmul(cg, -1);
     }
   }
-  if (stack_items > 1)
+
+  // 最后，如果栈上有多项（包括常数和各项结果），进行加法合并
+  if (stack_items > 1) {
     gen_adds(cg, stack_items);
+  }
 }
+
+// void gen_expr(CodeGen *cg, Expr *expr) {
+//   // 保证项的系数从高到低排
+//   OperandTerm *op_term = expr->op_terms.items;
+
+//   int term_count = expr->op_terms.item_cnts;
+//   if (!term_count) {
+//     gen_load_const(cg, expr->constant);
+//     return; // 空表达式
+//   }
+
+//   if (expr->constant != 0) {
+//     gen_load_const(cg, expr->constant);
+//   }
+
+//   // 分组处理相同系数的项
+//   int current_coeff = op_term->coefficient;
+//   int group_start = 0;
+//   int has_constant_on_stack = (expr->constant != 0) ? 1 : 0;
+//   int stack_items = has_constant_on_stack;
+
+//   for (int i = 0; i <= term_count; i++) {
+//     printf("%d\n", op_term[i].coefficient);
+//     // 检测系数变化或到达末尾
+//     int coeff_changed = (op_term[i].coefficient != current_coeff);
+
+//     if (i < term_count && current_coeff != 0) {
+//       gen_load_operand(cg, &op_term[i].operand);
+//       stack_items++;
+//     }
+
+//     if (!coeff_changed || i < term_count)
+//       continue;
+
+//     int group_size = i - group_start;
+
+//     if (current_coeff == 1) {
+//       if (stack_items > 1)
+//         gen_adds(cg, stack_items);
+//       stack_items = 1;
+//     } else if (current_coeff != 0) {
+//       // 处理组内加法（如果组内有多个项）
+//       if (group_size > 1) {
+//         gen_adds(cg, group_size);
+//         stack_items -= (group_size - 1); // 合并为1项
+//       }
+//       // 处理系数乘法（如果系数不是1）
+//       gen_cmul(cg, current_coeff);
+//     }
+
+//     // 准备下一个分组
+//     if (i < term_count) {
+//       current_coeff = op_term[i].coefficient;
+//       group_start = i;
+//     }
+//   }
+//   if (stack_items > 1)
+//     gen_adds(cg, stack_items);
+// }
 
 OpCode *gen_cond(CodeGen *cg, Cond *cond, short offset) {
   gen_expr(cg, &cond->right);
@@ -367,4 +462,6 @@ void cg_debug(CodeGen *cg) {
     puts(")");
   }
 }
+#endif
+
 #endif

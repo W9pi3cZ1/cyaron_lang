@@ -1,9 +1,16 @@
-#include "vm.h"
+#ifdef CODEGEN
+
+#ifndef NO_STD_INC
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
+#ifndef NO_CUSTOM_INC
 #include "codegen.h"
 #include "parser.h"
 #include "utils.h"
-#include <stdio.h>
-#include <stdlib.h>
+#include "vm.h"
+#endif
 
 void stack_init(Stack *stack) {
   stack->capacity = 128;
@@ -288,3 +295,5 @@ end:
          100 - (bad_cnts * 100 / cnts));
   printf("Dispatched commands of %d(100%%)\n", cnts);
 }
+
+#endif

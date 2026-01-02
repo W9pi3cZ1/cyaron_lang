@@ -271,15 +271,15 @@ void optimize_expr(Parser *parser, Expr *expr) {
     qsort(expr->op_terms.items, expr->op_terms.item_cnts, sizeof(OperandTerm),
           compare_operand_terms);
   }
-  // cut-off terms that coefficient=0
-  OperandTerm *op_term = expr->op_terms.items;
-  int end_i = 0;
-  for (end_i = 0; end_i < expr->op_terms.item_cnts; end_i++, op_term++) {
-    if (op_term->coefficient == 0) {
-      expr->op_terms.item_cnts = end_i;
-      break;
-    }
-  }
+  // // cut-off terms that coefficient=0
+  // OperandTerm *op_term = expr->op_terms.items;
+  // int end_i = 0;
+  // for (end_i = 0; end_i < expr->op_terms.item_cnts; end_i++, op_term++) {
+  //   if (op_term->coefficient == 0) {
+  //     expr->op_terms.item_cnts = end_i;
+  //     break;
+  //   }
+  // }
 }
 
 void parse_expr(Parser *parser, Expr *expr) {
