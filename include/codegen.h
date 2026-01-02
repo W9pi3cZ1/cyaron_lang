@@ -1,3 +1,5 @@
+#ifdef CODEGEN
+
 #ifndef _CODEGEN_H_
 #define _CODEGEN_H_
 
@@ -40,3 +42,5 @@ void cg_debug(CodeGen *cg);
 #endif
 
 #endif // _CODEGEN_H_
+
+#endif

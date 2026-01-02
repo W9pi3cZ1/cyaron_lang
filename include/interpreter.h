@@ -1,3 +1,5 @@
+#ifndef CODEGEN
+
 #ifndef _INTERPRETER_H_
 #define _INTERPRETER_H_
 
@@ -34,3 +36,5 @@ void interpreter_stats(Interpreter *interpreter);
 #endif
 
 #endif // _INTERPRETER_H_
+
+#endif

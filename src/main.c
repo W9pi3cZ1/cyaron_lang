@@ -107,6 +107,7 @@ void test() {
   CyrVM cyr_vm;
   cyr_vm_init(&cyr_vm, &parser.var_decls, &cg.codes);
   CLOCK_FUNC(start_time, end_time, time_spent, cyr_vm_execute, &cyr_vm);
+  cg_free(&cg);
 
 #else
 

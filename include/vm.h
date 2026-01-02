@@ -1,3 +1,5 @@
+#ifdef CODEGEN
+
 #ifndef _VM_H_
 #define _VM_H_
 
@@ -21,5 +23,7 @@ typedef struct CyrVM {
 void cyr_vm_init(CyrVM *cyr_vm, DynArr *var_decls, DynArr *codes);
 CyrVM *cyr_vm_create(DynArr *var_decls, DynArr *codes);
 void cyr_vm_execute(CyrVM *cyr_vm);
+
+#endif
 
 #endif
