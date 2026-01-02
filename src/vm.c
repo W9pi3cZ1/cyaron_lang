@@ -289,11 +289,14 @@ void cyr_vm_execute(CyrVM *cyr_vm) {
     op_ptr += off;
   }
 end:
+#ifndef NO_DEBUG
   printf("\nDispatched bad commands of %d(%d%%)\n", bad_cnts,
          bad_cnts * 100 / cnts);
   printf("Dispatched good commands of %d(%d%%)\n", cnts - bad_cnts,
          100 - (bad_cnts * 100 / cnts));
   printf("Dispatched commands of %d(100%%)\n", cnts);
+#endif
+  return;
 }
 
 #endif
