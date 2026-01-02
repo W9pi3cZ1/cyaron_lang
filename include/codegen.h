@@ -20,7 +20,7 @@ typedef struct OpCode {
     int constant;
     int term_cnts;
     VarDecl *ptr;
-    enum CmpType cmp_typ;
+    // enum CmpType cmp_typ;
   } data;
 } OpCode;
 

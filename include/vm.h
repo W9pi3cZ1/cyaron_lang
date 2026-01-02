@@ -5,14 +5,15 @@
 
 typedef struct Stack {
   int capacity;
-  int *bottom;
+  // int *bottom;
+  int bottom[128];
   int *top;
 } Stack;
 
 typedef struct CyrVM {
   DynArr *var_decls;
   DynArr *codes;
-  Stack stack;
+  // Stack stack;
 } CyrVM;
 
 void cyr_vm_init(CyrVM *cyr_vm, DynArr *var_decls, DynArr *codes);

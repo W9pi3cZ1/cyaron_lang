@@ -37,6 +37,27 @@ OpCode *gen_cmul(CodeGen *cg, int constant) {
 }
 
 OpCode *gen_adds(CodeGen *cg, int term_cnts) {
+  switch (term_cnts) {
+  case 1:
+    return NULL;
+  case 2: {
+    OpCode *binadd_op = da_try_push_back(&cg->codes);
+    binadd_op->typ = OP_BINADD;
+    return binadd_op;
+  }
+  case 3: {
+    OpCode *triadd_op = da_try_push_back(&cg->codes);
+    triadd_op->typ = OP_TRIADD;
+    return triadd_op;
+  }
+  case 4: {
+    OpCode *quadadd_op = da_try_push_back(&cg->codes);
+    quadadd_op->typ = OP_QUADADD;
+    return quadadd_op;
+  }
+  default:
+    break;
+  }
   OpCode *adds_op = da_try_push_back(&cg->codes);
   adds_op->typ = OP_ADDS;
   adds_op->data.term_cnts = term_cnts;
@@ -56,19 +77,19 @@ OpCode *gen_jmp(CodeGen *cg, short offset) {
   return jmp_op;
 }
 
-OpCode *gen_jz(CodeGen *cg, short offset) {
-  OpCode *jz_op = da_try_push_back(&cg->codes);
-  jz_op->typ = OP_JZ;
-  jz_op->data.offset = offset;
-  return jz_op;
-}
+// OpCode *gen_jz(CodeGen *cg, short offset) {
+//   OpCode *jz_op = da_try_push_back(&cg->codes);
+//   jz_op->typ = OP_JZ;
+//   jz_op->data.offset = offset;
+//   return jz_op;
+// }
 
-OpCode *gen_jnz(CodeGen *cg, short offset) {
-  OpCode *jnz_op = da_try_push_back(&cg->codes);
-  jnz_op->typ = OP_JNZ;
-  jnz_op->data.offset = offset;
-  return jnz_op;
-}
+// OpCode *gen_jnz(CodeGen *cg, short offset) {
+//   OpCode *jnz_op = da_try_push_back(&cg->codes);
+//   jnz_op->typ = OP_JNZ;
+//   jnz_op->data.offset = offset;
+//   return jnz_op;
+// }
 
 OpCode *gen_incr(CodeGen *cg) {
   OpCode *incr_op = da_try_push_back(&cg->codes);
@@ -76,11 +97,48 @@ OpCode *gen_incr(CodeGen *cg) {
   return incr_op;
 }
 
-OpCode *gen_cmp(CodeGen *cg, enum CmpType cmp_typ) {
-  OpCode *cmp_op = da_try_push_back(&cg->codes);
-  cmp_op->typ = OP_CMP;
-  cmp_op->data.cmp_typ = cmp_typ;
-  return cmp_op;
+static inline enum CmpType reverse_cmp_typ(enum CmpType cmp_typ) {
+  switch (cmp_typ) {
+  case CMP_LT:
+    return CMP_GE;
+  case CMP_GT:
+    return CMP_LE;
+  case CMP_EQ:
+    return CMP_NEQ;
+  case CMP_LE:
+    return CMP_GT;
+  case CMP_GE:
+    return CMP_LT;
+  case CMP_NEQ:
+    return CMP_EQ;
+  }
+}
+
+OpCode *gen_jcmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
+  OpCode *jcmp_op = da_try_push_back(&cg->codes);
+  switch (cmp_typ) {
+  case CMP_LT:
+    jcmp_op->typ = OP_JLT;
+    break;
+  case CMP_GT:
+    jcmp_op->typ = OP_JGT;
+    break;
+  case CMP_EQ:
+    jcmp_op->typ = OP_JEQ;
+    break;
+  case CMP_LE:
+    jcmp_op->typ = OP_JLE;
+    break;
+  case CMP_GE:
+    jcmp_op->typ = OP_JGE;
+    break;
+  case CMP_NEQ:
+    jcmp_op->typ = OP_JNEQ;
+    break;
+  }
+  // cmp_op->typ = OP_CMP;
+  jcmp_op->data.offset = offset;
+  return jcmp_op;
 }
 
 OpCode *gen_halt(CodeGen *cg) {
@@ -154,7 +212,7 @@ void gen_expr(CodeGen *cg, Expr *expr) {
       stack_items++;
     }
 
-    if (!(coeff_changed || i < term_count))
+    if (!coeff_changed || i < term_count)
       continue;
 
     int group_size = i - group_start;
@@ -183,10 +241,10 @@ void gen_expr(CodeGen *cg, Expr *expr) {
     gen_adds(cg, stack_items);
 }
 
-void gen_cond(CodeGen *cg, Cond *cond) {
+OpCode *gen_cond(CodeGen *cg, Cond *cond, short offset) {
   gen_expr(cg, &cond->right);
   gen_expr(cg, &cond->left);
-  gen_cmp(cg, cond->typ);
+  return gen_jcmp(cg, cond->typ, offset);
 }
 
 void gen_stmts(CodeGen *cg, DynArr *stmts) {
@@ -195,23 +253,23 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
     switch (stmt_ptr->typ) {
     case STMT_IHU_BLK: {
       IhuStmt *ihu_stmt = &stmt_ptr->inner.ihu;
-      gen_cond(cg, &ihu_stmt->cond);
+      ihu_stmt->cond.typ = reverse_cmp_typ(ihu_stmt->cond.typ);
+      OpCode *try_skip = gen_cond(cg, &ihu_stmt->cond, 0);
       int offset = cg->codes.item_cnts;
-      OpCode *try_skip = gen_jz(cg, 0);
       gen_stmts(cg, &ihu_stmt->stmts);
-      offset = cg->codes.item_cnts - offset;
+      offset = cg->codes.item_cnts - offset + 1;
       try_skip->data.offset = offset;
     } break;
     case STMT_WHILE_BLK: {
       WhileStmt *while_stmt = &stmt_ptr->inner.while_stmt;
-      OpCode *try_skip = gen_jmp(cg, 0);
+      OpCode *jmp_cond = gen_jmp(cg, 0);
       int stmts_begin = cg->codes.item_cnts;
       gen_stmts(cg, &while_stmt->stmts);
       int stmts_end = cg->codes.item_cnts;
-      gen_cond(cg, &while_stmt->cond);
+      OpCode *try_continue = gen_cond(cg, &while_stmt->cond, 0);
       int cond_end = cg->codes.item_cnts;
-      OpCode *try_continue = gen_jnz(cg, stmts_begin - cond_end);
-      try_skip->data.offset = stmts_end - stmts_begin + 1;
+      try_continue->data.offset = stmts_begin - cond_end + 1;
+      jmp_cond->data.offset = stmts_end - stmts_begin + 1;
     } break;
     case STMT_HOR_BLK: {
       HorStmt *hor_stmt = &stmt_ptr->inner.hor;
@@ -226,9 +284,9 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
       int stmts_end = cg->codes.item_cnts;
       gen_expr(cg, &hor_stmt->end);
       gen_load_operand(cg, &hor_stmt->var);
-      gen_cmp(cg, CMP_LE);
+      OpCode *try_continue = gen_jcmp(cg, CMP_LE, 0);
       int cond_end = cg->codes.item_cnts;
-      OpCode *try_continue = gen_jnz(cg, stmts_begin - cond_end);
+      try_continue->data.offset = stmts_begin - cond_end + 1;
       try_skip->data.offset = stmts_end - stmts_begin + 1;
     } break;
     case STMT_YOSORO_CMD: {
@@ -283,17 +341,24 @@ void cg_debug(CodeGen *cg) {
       printf("ptr: %p(#%hd)", decl_ptr, decl_ptr->decl_idx);
     } break;
     case OP_JMP:
-    case OP_JZ:
-    case OP_JNZ:
+    case OP_JLT:
+    case OP_JGT:
+    case OP_JEQ:
+    case OP_JLE:
+    case OP_JGE:
+    case OP_JNEQ:
       printf("offset: %hd", code_ptr->data.offset);
       break;
-    case OP_CMP:
-      printf("cmp_typ: %s",
-             debug_token_type(code_ptr->data.cmp_typ + TOK_CMP_LT - 1));
-      break;
+    // case OP_CMP:
+    //   printf("cmp_typ: %s",
+    //          debug_token_type(code_ptr->data.cmp_typ + TOK_CMP_LT - 1));
+    //   break;
     case OP_ADDS:
       printf("term_cnts: %d", code_ptr->data.term_cnts);
       break;
+    case OP_BINADD:
+    case OP_TRIADD:
+    case OP_QUADADD:
     case OP_INCR:
     case OP_PUT:
     case OP_HALT:

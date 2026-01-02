@@ -101,7 +101,6 @@ void test() {
   CodeGen cg;
   cg_init(&cg, &parser.stmts, &parser.var_decls);
   CLOCK_FUNC(start_time, end_time, time_spent, cg_gen, &cg);
-  cg_gen(&cg);
 #ifndef NO_DEBUG
   cg_debug(&cg);
 #endif
