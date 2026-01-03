@@ -134,7 +134,7 @@ int jneq(Stack *stack, union OpCodeData dat) {
 // }
 
 int incr(Stack *stack, union OpCodeData dat) {
-  ++*(stack->top - 1);
+  *(stack->top - 1) += dat.constant;
   return 1;
 }
 
@@ -236,8 +236,6 @@ int bad_commands(Stack *stack, OpCode *op) {
   //   return quadadd(stack, dat);
   // case OP_PUT:
   //   return put(stack, dat);
-  // case OP_INCR:
-  //   return incr(stack, dat);
   // default:
   return handlers[op->typ](stack, op->data);
   // }
@@ -278,6 +276,9 @@ void cyr_vm_execute(CyrVM *cyr_vm) {
       break;
     case OP_BINADD:
       off = binadd(&stack, dat);
+      break;
+    case OP_INCR:
+      off = incr(&stack, dat);
       break;
     case OP_HALT:
       goto end;

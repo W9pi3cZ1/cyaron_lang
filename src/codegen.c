@@ -1,6 +1,7 @@
 #ifdef CODEGEN
 
 #ifndef NO_STD_INC
+#include <stddef.h>
 #include <stdlib.h>
 #endif
 
@@ -24,38 +25,38 @@ CodeGen *cg_create(DynArr *stmts, DynArr *var_decls) {
 
 void cg_free(CodeGen *cg) { da_free(&cg->codes); }
 
-OpCode *gen_load_const(CodeGen *cg, int constant) {
+size_t gen_load_const(CodeGen *cg, int constant) {
   OpCode *constant_op = da_try_push_back(&cg->codes);
   constant_op->typ = OP_LOAD_CONST;
   constant_op->data.constant = constant;
-  return constant_op;
+  return cg->codes.item_cnts - 1;
 }
 
-OpCode *gen_cmul(CodeGen *cg, int constant) {
+size_t gen_cmul(CodeGen *cg, int constant) {
   OpCode *constant_op = da_try_push_back(&cg->codes);
   constant_op->typ = OP_CMUL;
   constant_op->data.constant = constant;
-  return constant_op;
+  return cg->codes.item_cnts - 1;
 }
 
-OpCode *gen_adds(CodeGen *cg, int term_cnts) {
+size_t gen_adds(CodeGen *cg, int term_cnts) {
   switch (term_cnts) {
   case 1:
-    return NULL;
+    return cg->codes.item_cnts - 1; // unreachable
   case 2: {
     OpCode *binadd_op = da_try_push_back(&cg->codes);
     binadd_op->typ = OP_BINADD;
-    return binadd_op;
+    return cg->codes.item_cnts - 1;
   }
   case 3: {
     OpCode *triadd_op = da_try_push_back(&cg->codes);
     triadd_op->typ = OP_TRIADD;
-    return triadd_op;
+    return cg->codes.item_cnts - 1;
   }
   case 4: {
     OpCode *quadadd_op = da_try_push_back(&cg->codes);
     quadadd_op->typ = OP_QUADADD;
-    return quadadd_op;
+    return cg->codes.item_cnts - 1;
   }
   default:
     break;
@@ -63,40 +64,41 @@ OpCode *gen_adds(CodeGen *cg, int term_cnts) {
   OpCode *adds_op = da_try_push_back(&cg->codes);
   adds_op->typ = OP_ADDS;
   adds_op->data.term_cnts = term_cnts;
-  return adds_op;
+  return cg->codes.item_cnts - 1;
 }
 
-OpCode *gen_put(CodeGen *cg) {
+size_t gen_put(CodeGen *cg) {
   OpCode *put_op = da_try_push_back(&cg->codes);
   put_op->typ = OP_PUT;
-  return put_op;
+  return cg->codes.item_cnts - 1;
 }
 
-OpCode *gen_jmp(CodeGen *cg, short offset) {
+size_t gen_jmp(CodeGen *cg, short offset) {
   OpCode *jmp_op = da_try_push_back(&cg->codes);
   jmp_op->typ = OP_JMP;
   jmp_op->data.offset = offset;
-  return jmp_op;
+  return cg->codes.item_cnts - 1;
 }
 
-// OpCode *gen_jz(CodeGen *cg, short offset) {
+// size_t gen_jz(CodeGen *cg, short offset) {
 //   OpCode *jz_op = da_try_push_back(&cg->codes);
 //   jz_op->typ = OP_JZ;
 //   jz_op->data.offset = offset;
-//   return jz_op;
+//   return cg->codes.item_cnts - 1;
 // }
 
-// OpCode *gen_jnz(CodeGen *cg, short offset) {
+// size_t gen_jnz(CodeGen *cg, short offset) {
 //   OpCode *jnz_op = da_try_push_back(&cg->codes);
 //   jnz_op->typ = OP_JNZ;
 //   jnz_op->data.offset = offset;
-//   return jnz_op;
+//   return cg->codes.item_cnts - 1;
 // }
 
-OpCode *gen_incr(CodeGen *cg) {
+size_t gen_incr(CodeGen *cg, int constant) {
   OpCode *incr_op = da_try_push_back(&cg->codes);
   incr_op->typ = OP_INCR;
-  return incr_op;
+  incr_op->data.constant = constant;
+  return cg->codes.item_cnts - 1;
 }
 
 static inline enum CmpType reverse_cmp_typ(enum CmpType cmp_typ) {
@@ -116,7 +118,7 @@ static inline enum CmpType reverse_cmp_typ(enum CmpType cmp_typ) {
   }
 }
 
-OpCode *gen_jcmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
+size_t gen_jcmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
   OpCode *jcmp_op = da_try_push_back(&cg->codes);
   switch (cmp_typ) {
   case CMP_LT:
@@ -140,13 +142,13 @@ OpCode *gen_jcmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
   }
   // cmp_op->typ = OP_CMP;
   jcmp_op->data.offset = offset;
-  return jcmp_op;
+  return cg->codes.item_cnts - 1;
 }
 
-OpCode *gen_halt(CodeGen *cg) {
+size_t gen_halt(CodeGen *cg) {
   OpCode *halt_op = da_try_push_back(&cg->codes);
   halt_op->typ = OP_HALT;
-  return halt_op;
+  return cg->codes.item_cnts - 1;
 }
 
 void gen_expr(CodeGen *cg, Expr *expr);
@@ -197,7 +199,17 @@ void gen_expr(CodeGen *cg, Expr *expr) {
 
   // 首先处理常数部分
   if (expr->constant != 0) {
-    gen_load_const(cg, expr->constant);
+    // 特判可优化成INCR的情况
+    if (term_count == 1 && op_term[0].coefficient != 0) {
+      gen_load_operand(cg, &op_term[0].operand);
+      if (op_term[0].coefficient != 1) {
+        gen_cmul(cg, op_term[0].coefficient);
+      }
+      gen_incr(cg, expr->constant);
+      return;
+    } else {
+      gen_load_const(cg, expr->constant);
+    }
   }
 
   int has_constant_on_stack = (expr->constant != 0) ? 1 : 0;
@@ -336,10 +348,14 @@ void gen_expr(CodeGen *cg, Expr *expr) {
 //     gen_adds(cg, stack_items);
 // }
 
-OpCode *gen_cond(CodeGen *cg, Cond *cond, short offset) {
+size_t gen_cond(CodeGen *cg, Cond *cond, short offset) {
   gen_expr(cg, &cond->right);
   gen_expr(cg, &cond->left);
   return gen_jcmp(cg, cond->typ, offset);
+}
+
+static OpCode *get_opcode(CodeGen *cg, size_t idx) {
+  return (OpCode *)da_get(&cg->codes, idx);
 }
 
 void gen_stmts(CodeGen *cg, DynArr *stmts) {
@@ -349,40 +365,40 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
     case STMT_IHU_BLK: {
       IhuStmt *ihu_stmt = &stmt_ptr->inner.ihu;
       ihu_stmt->cond.typ = reverse_cmp_typ(ihu_stmt->cond.typ);
-      OpCode *try_skip = gen_cond(cg, &ihu_stmt->cond, 0);
-      int offset = cg->codes.item_cnts;
+      size_t try_skip = gen_cond(cg, &ihu_stmt->cond, 0);
+      int offset = try_skip + 1;
       gen_stmts(cg, &ihu_stmt->stmts);
       offset = cg->codes.item_cnts - offset + 1;
-      try_skip->data.offset = offset;
+      get_opcode(cg, try_skip)->data.offset = offset; // avoid use after free
     } break;
     case STMT_WHILE_BLK: {
       WhileStmt *while_stmt = &stmt_ptr->inner.while_stmt;
-      OpCode *jmp_cond = gen_jmp(cg, 0);
-      int stmts_begin = cg->codes.item_cnts;
+      size_t jmp_cond = gen_jmp(cg, 0);
+      int stmts_begin = jmp_cond + 1;
       gen_stmts(cg, &while_stmt->stmts);
       int stmts_end = cg->codes.item_cnts;
-      OpCode *try_continue = gen_cond(cg, &while_stmt->cond, 0);
-      int cond_end = cg->codes.item_cnts;
-      try_continue->data.offset = stmts_begin - cond_end + 1;
-      jmp_cond->data.offset = stmts_end - stmts_begin + 1;
+      size_t try_continue = gen_cond(cg, &while_stmt->cond, 0);
+      int cond_end = try_continue + 1;
+      get_opcode(cg, try_continue)->data.offset = stmts_begin - cond_end + 1;
+      get_opcode(cg, jmp_cond)->data.offset = stmts_end - stmts_begin + 1;
     } break;
     case STMT_HOR_BLK: {
       HorStmt *hor_stmt = &stmt_ptr->inner.hor;
       gen_expr(cg, &hor_stmt->start);
       gen_store_operand(cg, &hor_stmt->var);
-      OpCode *try_skip = gen_jmp(cg, 0);
-      int stmts_begin = cg->codes.item_cnts;
+      size_t try_skip = gen_jmp(cg, 0);
+      int stmts_begin = try_skip + 1;
       gen_stmts(cg, &hor_stmt->stmts);
       gen_load_operand(cg, &hor_stmt->var);
-      gen_incr(cg);
+      gen_incr(cg, 1);
       gen_store_operand(cg, &hor_stmt->var);
       int stmts_end = cg->codes.item_cnts;
       gen_expr(cg, &hor_stmt->end);
       gen_load_operand(cg, &hor_stmt->var);
-      OpCode *try_continue = gen_jcmp(cg, CMP_LE, 0);
-      int cond_end = cg->codes.item_cnts;
-      try_continue->data.offset = stmts_begin - cond_end + 1;
-      try_skip->data.offset = stmts_end - stmts_begin + 1;
+      size_t try_continue = gen_jcmp(cg, CMP_LE, 0);
+      int cond_end = try_continue + 1;
+      get_opcode(cg, try_continue)->data.offset = stmts_begin - cond_end + 1;
+      get_opcode(cg, try_skip)->data.offset = stmts_end - stmts_begin + 1;
     } break;
     case STMT_YOSORO_CMD: {
       YosoroStmt *yosoro_stmt = &stmt_ptr->inner.yosoro;
@@ -392,6 +408,8 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
     }
     case STMT_SET_CMD: {
       SetStmt *set_stmt = &stmt_ptr->inner.set;
+      Expr *expr = &set_stmt->expr;
+      OperandTerm *op_term_ptr = expr->op_terms.items;
       gen_expr(cg, &set_stmt->expr);
       gen_store_operand(cg, &set_stmt->operand);
       break;
@@ -426,6 +444,7 @@ void cg_debug(CodeGen *cg) {
     switch (code_ptr->typ) {
     case OP_LOAD_CONST:
     case OP_CMUL:
+    case OP_INCR:
       printf("const: %d", code_ptr->data.constant);
       break;
     case OP_LOAD_INT:
@@ -454,7 +473,6 @@ void cg_debug(CodeGen *cg) {
     case OP_BINADD:
     case OP_TRIADD:
     case OP_QUADADD:
-    case OP_INCR:
     case OP_PUT:
     case OP_HALT:
       break;

@@ -40,8 +40,8 @@ OPCODE(OP_JGE)  // JGE(offset: i16)[left: i32, right: i32]
 OPCODE(OP_JNEQ) // JNEQ(offset: i16)[left: i32, right: i32]
                 // -> push(pop(left) != pop(right))
 
-OPCODE(OP_INCR)    // INCR[num: i32]
-                   // -> push(pop(num)+1)
+OPCODE(OP_INCR)    // INCR(const: i32)[num: i32]
+                   // -> push(pop(num)+const)
 OPCODE(OP_BINADD)  // BINADDS[a1: i32, a2: i32]
                    // -> push(pop(a1)+pop(a2))
 OPCODE(OP_TRIADD)  // TRIADDS[a1: i32, a2: i32, a3: i32]
