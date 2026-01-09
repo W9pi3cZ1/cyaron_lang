@@ -78,33 +78,14 @@ typedef struct VarDecl {
 
 enum CmpType {
   CMP_LT = 0b001,
-  CMP_GT = 0b010,
-  CMP_NEQ = 0b011,
-  CMP_GE = 0b101,
-  CMP_LE = 0b110,
-  CMP_EQ = 0b111,
+  CMP_EQ = 0b010,
+  CMP_LE = 0b011,
+  CMP_GT = 0b100,
+  CMP_NEQ = 0b101,
+  CMP_GE = 0b110,
 };
 
-static char do_cmp(enum CmpType cond_typ, int left, int right) {
-  // Assume it always within range ...
-  // if (cond_typ < 0 || cond_typ >= 6)
-  //   return 0;
-
-  // enum CmpType {
-  //   CMP_LT = 0b001,
-  //   CMP_GT = 0b010,
-  //   CMP_NEQ = 0b011,
-  //   CMP_GE = 0b101,
-  //   CMP_LE = 0b110,
-  //   CMP_EQ = 0b111,
-  // };
-
-  const char lt = (left < right) & cond_typ;
-  const char gt = (left > right) & (cond_typ >> 1);
-  const char cmp = lt | gt;
-  const char hi = cond_typ >> 2;
-  return cmp ^ hi;
-};
+char do_cmp(enum CmpType cond_typ, int left, int right);
 
 typedef struct Cond {
   enum CmpType typ; // TOK_CMP_[XXX]

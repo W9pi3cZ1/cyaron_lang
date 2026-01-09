@@ -118,30 +118,11 @@ static inline enum CmpType reverse_cmp_typ(enum CmpType cmp_typ) {
   }
 }
 
-size_t gen_jcmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
-  OpCode *jcmp_op = da_try_push_back(&cg->codes);
-  switch (cmp_typ) {
-  case CMP_LT:
-    jcmp_op->typ = OP_JLT;
-    break;
-  case CMP_GT:
-    jcmp_op->typ = OP_JGT;
-    break;
-  case CMP_EQ:
-    jcmp_op->typ = OP_JEQ;
-    break;
-  case CMP_LE:
-    jcmp_op->typ = OP_JLE;
-    break;
-  case CMP_GE:
-    jcmp_op->typ = OP_JGE;
-    break;
-  case CMP_NEQ:
-    jcmp_op->typ = OP_JNEQ;
-    break;
-  }
-  // cmp_op->typ = OP_CMP;
-  jcmp_op->data.offset = offset;
+size_t gen_cjmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
+  OpCode *cjmp_op = da_try_push_back(&cg->codes);
+  cjmp_op->typ = OP_CJMP;
+  cjmp_op->data.cjmp.cmp_typ = cmp_typ;
+  cjmp_op->data.cjmp.offset = offset;
   return cg->codes.item_cnts - 1;
 }
 
@@ -351,7 +332,7 @@ void gen_expr(CodeGen *cg, Expr *expr) {
 size_t gen_cond(CodeGen *cg, Cond *cond, short offset) {
   gen_expr(cg, &cond->right);
   gen_expr(cg, &cond->left);
-  return gen_jcmp(cg, cond->typ, offset);
+  return gen_cjmp(cg, cond->typ, offset);
 }
 
 static OpCode *get_opcode(CodeGen *cg, size_t idx) {
@@ -366,28 +347,25 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
       IhuStmt *ihu_stmt = &stmt_ptr->inner.ihu;
       ihu_stmt->cond.typ = reverse_cmp_typ(ihu_stmt->cond.typ);
       size_t try_skip = gen_cond(cg, &ihu_stmt->cond, 0);
-      int offset = try_skip + 1;
       gen_stmts(cg, &ihu_stmt->stmts);
-      offset = cg->codes.item_cnts - offset + 1;
-      get_opcode(cg, try_skip)->data.offset = offset; // avoid use after free
+      get_opcode(cg, try_skip)->data.cjmp.offset =
+          cg->codes.item_cnts - try_skip; // avoid use after free
     } break;
     case STMT_WHILE_BLK: {
       WhileStmt *while_stmt = &stmt_ptr->inner.while_stmt;
       size_t jmp_cond = gen_jmp(cg, 0);
-      int stmts_begin = jmp_cond + 1;
       gen_stmts(cg, &while_stmt->stmts);
       int stmts_end = cg->codes.item_cnts;
       size_t try_continue = gen_cond(cg, &while_stmt->cond, 0);
-      int cond_end = try_continue + 1;
-      get_opcode(cg, try_continue)->data.offset = stmts_begin - cond_end + 1;
-      get_opcode(cg, jmp_cond)->data.offset = stmts_end - stmts_begin + 1;
+      get_opcode(cg, try_continue)->data.cjmp.offset =
+          jmp_cond - try_continue + 1;
+      get_opcode(cg, jmp_cond)->data.offset = stmts_end - jmp_cond;
     } break;
     case STMT_HOR_BLK: {
       HorStmt *hor_stmt = &stmt_ptr->inner.hor;
       gen_expr(cg, &hor_stmt->start);
       gen_store_operand(cg, &hor_stmt->var);
       size_t try_skip = gen_jmp(cg, 0);
-      int stmts_begin = try_skip + 1;
       gen_stmts(cg, &hor_stmt->stmts);
       gen_load_operand(cg, &hor_stmt->var);
       gen_incr(cg, 1);
@@ -395,10 +373,12 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
       int stmts_end = cg->codes.item_cnts;
       gen_expr(cg, &hor_stmt->end);
       gen_load_operand(cg, &hor_stmt->var);
-      size_t try_continue = gen_jcmp(cg, CMP_LE, 0);
-      int cond_end = try_continue + 1;
-      get_opcode(cg, try_continue)->data.offset = stmts_begin - cond_end + 1;
-      get_opcode(cg, try_skip)->data.offset = stmts_end - stmts_begin + 1;
+      size_t try_continue = gen_cjmp(cg, CMP_LE, 0);
+      get_opcode(cg, try_continue)->data.cjmp.offset =
+          try_skip - try_continue + 1;
+      get_opcode(cg, try_skip)->data.offset = stmts_end - try_skip;
+      gen_expr(cg, &hor_stmt->end);
+      gen_store_operand(cg, &hor_stmt->var);
     } break;
     case STMT_YOSORO_CMD: {
       YosoroStmt *yosoro_stmt = &stmt_ptr->inner.yosoro;
@@ -437,6 +417,16 @@ const char *op_code_type(enum OpCodeType op_typ) {
   }
 }
 
+const char *stringfy_cmp_typ(enum CmpType cmp_typ) {
+  if (cmp_typ < CMP_LT || cmp_typ > CMP_GE)
+    return "<Invalid>";
+  const char *strs[] = {
+      [CMP_LT] = "<", [CMP_EQ] = "=",   [CMP_LE] = "<=",
+      [CMP_GT] = ">", [CMP_NEQ] = "!=", [CMP_GE] = ">=",
+  };
+  return strs[cmp_typ];
+}
+
 void cg_debug(CodeGen *cg) {
   OpCode *code_ptr = cg->codes.items;
   for (int i = 0; i < cg->codes.item_cnts; i++, code_ptr++) {
@@ -455,13 +445,12 @@ void cg_debug(CodeGen *cg) {
       printf("ptr: %p(#%hd)", decl_ptr, decl_ptr->decl_idx);
     } break;
     case OP_JMP:
-    case OP_JLT:
-    case OP_JGT:
-    case OP_JEQ:
-    case OP_JLE:
-    case OP_JGE:
-    case OP_JNEQ:
       printf("offset: %hd", code_ptr->data.offset);
+      break;
+    case OP_CJMP:
+      printf("cmp_typ: \"%s\"(%d), offset: %hd",
+             stringfy_cmp_typ(code_ptr->data.cjmp.cmp_typ),
+             code_ptr->data.cjmp.cmp_typ, code_ptr->data.cjmp.offset);
       break;
     // case OP_CMP:
     //   printf("cmp_typ: %s",

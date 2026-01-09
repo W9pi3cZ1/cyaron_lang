@@ -27,18 +27,8 @@ OPCODE(OP_JMP) // (Directly)JMP(offset: i16)
 
 // OPCODE(OP_CMP) // CMP(cmp_type: CmpType)[left: i32, right: i32]
 //                // -> push(cmp(cmp_type, pop(left), pop(right))?1:0)
-OPCODE(OP_JLT)  // JLT(offset: i16)[left: i32, right: i32]
-                // -> push(pop(left) < pop(right))
-OPCODE(OP_JGT)  // JGT(offset: i16)[left: i32, right: i32]
-                // -> push(pop(left) > pop(right))
-OPCODE(OP_JEQ)  // JEQ(offset: i16)[left: i32, right: i32]
-                // -> push(pop(left) == pop(right))
-OPCODE(OP_JLE)  // JLE(offset: i16)[left: i32, right: i32]
-                // -> push(pop(left) <= pop(right))
-OPCODE(OP_JGE)  // JGE(offset: i16)[left: i32, right: i32]
-                // -> push(pop(left) >= pop(right))
-OPCODE(OP_JNEQ) // JNEQ(offset: i16)[left: i32, right: i32]
-                // -> push(pop(left) != pop(right))
+OPCODE(OP_CJMP) // CJMP(cmp_type: CmpType, offset: i16)[left: i32, right: i32]
+                // -> if cmp(pop(left), pop(right)): jmp(offset)
 
 OPCODE(OP_INCR)    // INCR(const: i32)[num: i32]
                    // -> push(pop(num)+const)

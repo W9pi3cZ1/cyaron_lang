@@ -118,10 +118,30 @@ int eval_expr(Interpreter *interpreter, Expr *expr) {
 
 void execute_stmts(Interpreter *interpreter, DynArr *stmts);
 
+char do_cmp(enum CmpType cond_typ, int left, int right) {
+  // Assume it always within range ...
+  // if (cond_typ < 0 || cond_typ >= 6)
+  //   return 0;
+
+  // enum CmpType {
+  //   CMP_LT = 0b001,
+  //   CMP_EQ = 0b010,
+  //   CMP_LE = 0b011,
+  //   CMP_GT = 0b100,
+  //   CMP_NEQ = 0b101,
+  //   CMP_GE = 0b110,
+  // };
+
+  const char ge = left >= right;
+  const char gt = left > right;
+  return (cond_typ >> (ge + gt)) & 1;
+};
+
 char execute_cond(Interpreter *interpreter, Cond *cond) {
   int left = eval_expr(interpreter, &cond->left);
   int right = eval_expr(interpreter, &cond->right);
-  return do_cmp(cond->typ, left, right);
+  int res = do_cmp(cond->typ, left, right);
+  return res;
 }
 
 typedef void (*StmtHandler)(Interpreter *interpreter, Stmt *stmt);

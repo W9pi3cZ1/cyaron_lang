@@ -24,9 +24,19 @@ def fib_stack(n):
     
     return result
 
+def fib(n):
+    if n <= 1:
+        return n
+    return fib(n-1) + fib(n-2)
+
 # 测试
 import time
 start = time.time()
-print(f"fib(30) = {fib_stack(30)}")
+print(f"fib(30) = {fib(30)}")
+end = time.time()
+print(f"Time: {(end-start)*1000:.2f}ms")
+
+start = time.time()
+print(f"fib_stack(30) = {fib_stack(30)}")
 end = time.time()
 print(f"Time: {(end-start)*1000:.2f}ms")
