@@ -152,17 +152,41 @@ void gen_load_operand(CodeGen *cg, Operand *operand) {
 }
 
 void gen_store_operand(CodeGen *cg, Operand *operand) {
+  VarDecl *var_decl_ptr = (VarDecl *)(cg->var_decls->items) + operand->decl_idx;
   switch (operand->typ) {
   case OPERAND_INT_VAR: {
     OpCode *int_op = da_try_push_back(&cg->codes);
-    int_op->data.ptr = (VarDecl *)(cg->var_decls->items) + operand->decl_idx;
-    int_op->typ = OP_STORE_INT;
+
+    if ((cg->codes.item_cnts >= 3) && (int_op[-1].typ == OP_INCR) &&
+        (int_op[-2].typ == OP_LOAD_INT) &&
+        (int_op[-2].data.ptr == var_decl_ptr)) {
+      // 特判优化
+      // LOAD_I+INCR+STORE_I --> INCI
+      cg->codes.item_cnts -= 2; // 缩容
+      int_op[-2].typ = OP_INCI;
+      int_op[-2].data.var_const.constant = int_op[-1].data.constant;
+      int_op[-2].data.var_const.ptr = var_decl_ptr;
+      // :WARN: 不进行清理操作...
+    } else if ((cg->codes.item_cnts >= 2) &&
+               (int_op[-1].typ == OP_LOAD_CONST)) {
+      // 特判优化
+      // LOAD_C+STORE_I --> SETI
+      cg->codes.item_cnts -= 1; // 缩容
+      int constant = int_op[-1].data.constant;
+      int_op[-1].typ = OP_SETI;
+      int_op[-1].data.var_const.constant = constant;
+      int_op[-1].data.var_const.ptr = var_decl_ptr;
+      // :WARN: 不进行清理操作...
+    } else {
+      int_op->data.ptr = var_decl_ptr;
+      int_op->typ = OP_STORE_INT;
+    }
   } break;
   case OPERAND_ARR_ELEM: {
     // Load Idx
     gen_expr(cg, &operand->idx_expr);
     OpCode *arr_op = da_try_push_back(&cg->codes);
-    arr_op->data.ptr = (VarDecl *)(cg->var_decls->items) + operand->decl_idx;
+    arr_op->data.ptr = var_decl_ptr;
     arr_op->typ = OP_STORE_ARR;
   } break;
   }
@@ -452,6 +476,12 @@ void cg_debug(CodeGen *cg) {
              stringfy_cmp_typ(code_ptr->data.cjmp.cmp_typ),
              code_ptr->data.cjmp.cmp_typ, code_ptr->data.cjmp.offset);
       break;
+    case OP_SETI:
+    case OP_INCI: {
+      VarDecl *decl_ptr = code_ptr->data.var_const.ptr;
+      printf("ptr: %p(#%hd), const: %d", decl_ptr, decl_ptr->decl_idx,
+             code_ptr->data.var_const.constant);
+    } break;
     // case OP_CMP:
     //   printf("cmp_typ: %s",
     //          debug_token_type(code_ptr->data.cmp_typ + TOK_CMP_LT - 1));

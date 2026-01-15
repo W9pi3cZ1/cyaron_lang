@@ -45,17 +45,11 @@ CyrVM *cyr_vm_create(DynArr *var_decls, DynArr *codes) {
   return cyr_vm;
 }
 
-int arr_read(VarDecl *decl, int idx) {
-  return decl->data.a.arr[idx - decl->start];
+int *arr_ref(VarDecl *decl, int idx) {
+  return &decl->data.a.arr[idx - decl->start];
 }
 
-int int_read(VarDecl *decl) { return decl->data.i.val; }
-
-void arr_write(VarDecl *decl, int idx, int val) {
-  decl->data.a.arr[idx - decl->start] = val;
-}
-
-void int_write(VarDecl *decl, int val) { decl->data.i.val = val; }
+int *int_ref(VarDecl *decl) { return &decl->data.i.val; }
 
 typedef short (*vm_handler)(Stack *stack, union OpCodeData dat);
 
@@ -65,24 +59,29 @@ short load_const(Stack *stack, union OpCodeData dat) {
 }
 
 short load_int(Stack *stack, union OpCodeData dat) {
-  stack->top[-1] = int_read(dat.ptr);
+  stack->top[-1] = *int_ref(dat.ptr);
   return 1;
 }
 
 short load_arr(Stack *stack, union OpCodeData dat) {
   int idx = stack->top[-1];
-  stack->top[-1] = arr_read(dat.ptr, idx);
+  stack->top[-1] = *arr_ref(dat.ptr, idx);
   return 1;
 }
 
 short store_int(Stack *stack, union OpCodeData dat) {
-  int_write(dat.ptr, stack->top[0]);
+  *int_ref(dat.ptr) = stack->top[0];
   return 1;
 }
 
 short store_arr(Stack *stack, union OpCodeData dat) {
   int idx = stack->top[1];
-  arr_write(dat.ptr, idx, stack->top[0]);
+  *arr_ref(dat.ptr, idx) = stack->top[0];
+  return 1;
+}
+
+short seti(Stack *stack, union OpCodeData dat) {
+  *int_ref(dat.var_const.ptr) = dat.var_const.constant;
   return 1;
 }
 
@@ -123,6 +122,11 @@ short cjmp(Stack *stack, union OpCodeData dat) {
 
 short incr(Stack *stack, union OpCodeData dat) {
   stack->top[-1] += dat.constant;
+  return 1;
+}
+
+short inci(Stack *stack, union OpCodeData dat) {
+  *int_ref(dat.var_const.ptr) += dat.var_const.constant;
   return 1;
 }
 
@@ -169,30 +173,35 @@ static vm_handler handlers[] = {
     [OP_LOAD_ARR] = load_arr,
     [OP_STORE_INT] = store_int,
     [OP_STORE_ARR] = store_arr,
+    [OP_SETI] = seti,
     [OP_JMP] = jmp,
-    // [OP_JZ] = jz,
-    // [OP_JNZ] = jnz,
-    // [OP_CMP] = cmp,
     [OP_CJMP] = cjmp,
-    [OP_ADDS] = adds,
-    [OP_CMUL] = cmul,
+    [OP_INCR] = incr,
+    [OP_INCI] = inci,
     [OP_BINADD] = binadd,
     [OP_TRIADD] = triadd,
     [OP_QUADADD] = quadadd,
-    [OP_INCR] = incr,
+    [OP_ADDS] = adds,
+    [OP_CMUL] = cmul,
     [OP_PUT] = put,
     [OP_HALT] = empty_func,
 };
 
+#define ST_PO(x) (0 + (x))
+
 static int stack_preoff[] = {
-    [OP_LOAD_CONST] = 1, [OP_LOAD_INT] = 1,   [OP_LOAD_ARR] = 0,
-    [OP_STORE_INT] = -1, [OP_STORE_ARR] = -2, [OP_JMP] = 0,
-    [OP_CJMP] = -2,      [OP_ADDS] = 0,       [OP_CMUL] = 0,
-    [OP_BINADD] = -1,    [OP_TRIADD] = -2,    [OP_QUADADD] = -3,
-    [OP_INCR] = 0,       [OP_PUT] = -1,       [OP_HALT] = 0,
+    [OP_LOAD_CONST] = ST_PO(1), [OP_LOAD_INT] = ST_PO(1),
+    [OP_LOAD_ARR] = ST_PO(0),   [OP_STORE_INT] = ST_PO(-1),
+    [OP_STORE_ARR] = ST_PO(-2), [OP_SETI] = ST_PO(0),
+    [OP_JMP] = ST_PO(0),        [OP_CJMP] = ST_PO(-2),
+    [OP_INCR] = ST_PO(0),       [OP_INCI] = ST_PO(0),
+    [OP_BINADD] = ST_PO(-1),    [OP_TRIADD] = ST_PO(-2),
+    [OP_QUADADD] = ST_PO(-3),   [OP_ADDS] = ST_PO(0),
+    [OP_CMUL] = ST_PO(0),       [OP_PUT] = ST_PO(-1),
+    [OP_HALT] = ST_PO(0),
 };
 
-int get_sp_preoff(enum OpCodeType typ) { return stack_preoff[typ]; }
+int get_sp_preoff(enum OpCodeType typ) { return stack_preoff[typ] - ST_PO(0); }
 
 short bad_commands(Stack *stack, OpCode *op) {
   return handlers[op->typ](stack, op->data);
@@ -203,7 +212,7 @@ void cyr_vm_execute(CyrVM *cyr_vm) {
   Stack stack;
   stack_init(&stack);
   union OpCodeData dat = op_ptr->data;
-  int off;
+  int off = 0;
   int cnts = 0;
   int bad_cnts = 0;
   while (1) {
@@ -229,6 +238,9 @@ void cyr_vm_execute(CyrVM *cyr_vm) {
     case OP_STORE_ARR:
       store_arr(&stack, dat);
       break;
+    case OP_SETI:
+      seti(&stack, dat);
+      break;
     case OP_CMUL:
       cmul(&stack, dat);
       break;
@@ -237,6 +249,9 @@ void cyr_vm_execute(CyrVM *cyr_vm) {
       break;
     case OP_INCR:
       incr(&stack, dat);
+      break;
+    case OP_INCI:
+      inci(&stack, dat);
       break;
     case OP_JMP:
       off = jmp(&stack, dat);

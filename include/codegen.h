@@ -20,6 +20,11 @@ typedef struct CondJmp {
   short offset;
 } CondJmp;
 
+typedef struct IncVar {
+  VarDecl *ptr;
+  int constant;
+} VarConst;
+
 typedef struct OpCode {
   enum OpCodeType typ;
   union OpCodeData {
@@ -28,6 +33,7 @@ typedef struct OpCode {
     int term_cnts;
     VarDecl *ptr;
     CondJmp cjmp;
+    VarConst var_const;
     // enum CmpType cmp_typ;
   } data;
 } OpCode;
