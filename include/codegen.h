@@ -27,6 +27,7 @@ typedef struct IncVar {
 
 typedef struct OpCode {
   enum OpCodeType typ;
+  int stack_delta;
   union OpCodeData {
     short offset;
     int constant;

@@ -64,16 +64,16 @@ typedef union VarData {
 } VarData;
 
 typedef struct VarDecl {
-  enum VarType typ;
-  // union {
   VarData data;
-  const char *name;
-  unsigned short decl_idx;
-  // };
   struct {
     int start;
     int end;
   };
+  enum VarType typ;
+  // union {
+  const char *name;
+  unsigned short decl_idx;
+  // };
 } VarDecl;
 
 enum CmpType {

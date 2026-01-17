@@ -13,12 +13,14 @@
 #endif
 
 void stack_init(Stack *stack) {
-  stack->capacity = 128;
+  int capacity = sizeof(stack->bottom) / sizeof(*stack->bottom);
+  stack->capacity = capacity;
   // stack->bottom = malloc(stack->capacity);
-  stack->top = stack->bottom;
+  stack->top = stack->bottom + capacity - 1;
 }
 
-void stack_check_capacity(Stack *stack) {
+void stack_check_capacity(
+    Stack *stack) { // 太过神奇了，没有这个“无用函数”反而速度会变慢
   if (stack->top >= stack->bottom + stack->capacity) {
     printf("Stack Overflow!");
     // int diff = stack->top - stack->bottom;
@@ -30,9 +32,12 @@ void stack_check_capacity(Stack *stack) {
 
 void stack_push(Stack *stack, int data) {
   // stack_check_capacity(stack);
-  *stack->top++ = data;
+  *stack->top-- = data;
 }
-int stack_pop(Stack *stack) { return *--stack->top; }
+int stack_pop(Stack *stack) {
+  // stack_check_capacity(stack);
+  return *++stack->top;
+}
 
 void cyr_vm_init(CyrVM *cyr_vm, DynArr *var_decls, DynArr *codes) {
   cyr_vm->codes = codes;
@@ -54,18 +59,18 @@ int *int_ref(VarDecl *decl) { return &decl->data.i.val; }
 typedef short (*vm_handler)(Stack *stack, union OpCodeData dat);
 
 short load_const(Stack *stack, union OpCodeData dat) {
-  stack->top[-1] = dat.constant;
+  stack->top[1] = dat.constant;
   return 1;
 }
 
 short load_int(Stack *stack, union OpCodeData dat) {
-  stack->top[-1] = *int_ref(dat.ptr);
+  stack->top[1] = *int_ref(dat.ptr);
   return 1;
 }
 
 short load_arr(Stack *stack, union OpCodeData dat) {
-  int idx = stack->top[-1];
-  stack->top[-1] = *arr_ref(dat.ptr, idx);
+  int idx = stack->top[1];
+  stack->top[1] = *arr_ref(dat.ptr, idx);
   return 1;
 }
 
@@ -75,7 +80,7 @@ short store_int(Stack *stack, union OpCodeData dat) {
 }
 
 short store_arr(Stack *stack, union OpCodeData dat) {
-  int idx = stack->top[1];
+  int idx = stack->top[-1];
   *arr_ref(dat.ptr, idx) = stack->top[0];
   return 1;
 }
@@ -107,7 +112,7 @@ char do_cmp(enum CmpType cond_typ, int left, int right) {
 };
 
 short cjmp(Stack *stack, union OpCodeData dat) {
-  int left = stack->top[1];
+  int left = stack->top[-1];
   int right = stack->top[0];
 
   return do_cmp(dat.cjmp.cmp_typ, left, right) ? dat.cjmp.offset : 1;
@@ -121,7 +126,7 @@ short cjmp(Stack *stack, union OpCodeData dat) {
 // }
 
 short incr(Stack *stack, union OpCodeData dat) {
-  stack->top[-1] += dat.constant;
+  stack->top[1] += dat.constant;
   return 1;
 }
 
@@ -131,27 +136,27 @@ short inci(Stack *stack, union OpCodeData dat) {
 }
 
 short binadd(Stack *stack, union OpCodeData dat) {
-  stack->top[-1] += stack->top[0];
+  stack->top[1] += stack->top[0];
   return 1;
 }
 
 short triadd(Stack *stack, union OpCodeData dat) {
-  stack->top[-1] += stack->top[0] + stack->top[1];
+  stack->top[1] += stack->top[0] + stack->top[-1];
   return 1;
 }
 
 short quadadd(Stack *stack, union OpCodeData dat) {
-  stack->top[-1] += stack->top[0] + stack->top[1] + stack->top[2];
+  stack->top[1] += stack->top[0] + stack->top[-1] + stack->top[-2];
   return 1;
 }
 
 short adds(Stack *stack, union OpCodeData dat) {
-  stack->top -= dat.term_cnts;
+  stack->top++;
   int *res = stack->top;
   for (int i = 1; i < dat.term_cnts; i++) {
     *res += stack->top[i];
   }
-  stack->top++;
+  stack->top += dat.term_cnts - 2;
   return 1;
 }
 
@@ -189,40 +194,45 @@ static vm_handler handlers[] = {
 
 #define ST_PO(x) (0 + (x))
 
-static int stack_preoff[] = {
-    [OP_LOAD_CONST] = ST_PO(1), [OP_LOAD_INT] = ST_PO(1),
-    [OP_LOAD_ARR] = ST_PO(0),   [OP_STORE_INT] = ST_PO(-1),
-    [OP_STORE_ARR] = ST_PO(-2), [OP_SETI] = ST_PO(0),
-    [OP_JMP] = ST_PO(0),        [OP_CJMP] = ST_PO(-2),
-    [OP_INCR] = ST_PO(0),       [OP_INCI] = ST_PO(0),
-    [OP_BINADD] = ST_PO(-1),    [OP_TRIADD] = ST_PO(-2),
-    [OP_QUADADD] = ST_PO(-3),   [OP_ADDS] = ST_PO(0),
-    [OP_CMUL] = ST_PO(0),       [OP_PUT] = ST_PO(-1),
+static int stack_deltas[] = {
+    [OP_LOAD_CONST] = ST_PO(-1), [OP_LOAD_INT] = ST_PO(-1),
+    [OP_LOAD_ARR] = ST_PO(0),    [OP_STORE_INT] = ST_PO(1),
+    [OP_STORE_ARR] = ST_PO(2),   [OP_SETI] = ST_PO(0),
+    [OP_JMP] = ST_PO(0),         [OP_CJMP] = ST_PO(2),
+    [OP_INCR] = ST_PO(0),        [OP_INCI] = ST_PO(0),
+    [OP_BINADD] = ST_PO(1),      [OP_TRIADD] = ST_PO(2),
+    [OP_QUADADD] = ST_PO(3),     [OP_ADDS] = ST_PO(0),
+    [OP_CMUL] = ST_PO(0),        [OP_PUT] = ST_PO(1),
     [OP_HALT] = ST_PO(0),
 };
 
-int get_sp_preoff(enum OpCodeType typ) { return stack_preoff[typ] - ST_PO(0); }
+int get_stack_delta(enum OpCodeType typ) {
+  return stack_deltas[typ] - ST_PO(0);
+}
 
-short bad_commands(Stack *stack, OpCode *op) {
-  return handlers[op->typ](stack, op->data);
+short bad_commands(Stack *stack, enum OpCodeType typ, union OpCodeData dat) {
+  return handlers[typ](stack, dat);
 }
 
 void cyr_vm_execute(CyrVM *cyr_vm) {
-  OpCode *op_ptr = cyr_vm->codes->items;
   Stack stack;
   stack_init(&stack);
+  OpCode *op_ptr = cyr_vm->codes->items;
   union OpCodeData dat = op_ptr->data;
-  int off = 0;
+  enum OpCodeType typ = op_ptr->typ;
+#ifndef NO_DEBUG
   int cnts = 0;
   int bad_cnts = 0;
+#endif
   while (1) {
-    cnts++;
 #ifndef NO_DEBUG
+    cnts++;
     // printf("%s\n", op_code_type(op_ptr->typ));
 #endif
+    typ = op_ptr->typ;
     dat = op_ptr->data;
-    stack.top += get_sp_preoff(op_ptr->typ);
-    switch (op_ptr->typ) {
+    stack.top += op_ptr->stack_delta;
+    switch (typ) {
     case OP_LOAD_CONST:
       load_const(&stack, dat);
       break;
@@ -254,24 +264,21 @@ void cyr_vm_execute(CyrVM *cyr_vm) {
       inci(&stack, dat);
       break;
     case OP_JMP:
-      off = jmp(&stack, dat);
-      break;
+      op_ptr += jmp(&stack, dat);
+      continue;
     case OP_CJMP:
-      off = cjmp(&stack, dat);
-      break;
+      op_ptr += cjmp(&stack, dat);
+      continue;
     default:
+#ifndef NO_DEBUG
       bad_cnts++;
-      bad_commands(&stack, op_ptr);
+#endif
+      bad_commands(&stack, typ, dat);
       break;
     case OP_HALT:
       goto end;
     }
-    if (!off) {
-      op_ptr++;
-    } else {
-      op_ptr += off;
-      off = 0;
-    }
+    op_ptr++;
   }
 end:
 #ifndef NO_DEBUG

@@ -9,6 +9,7 @@
 #include "codegen.h"
 #include "parser.h"
 #include "utils.h"
+#include "vm.h"
 #endif
 
 void cg_init(CodeGen *cg, DynArr *stmts, DynArr *var_decls) {
@@ -422,9 +423,17 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
   }
 }
 
+void compute_stack_deltas(DynArr *codes) {
+  OpCode *code_ptr = codes->items;
+  for (int i = 0; i < codes->item_cnts; i++, code_ptr++) {
+    code_ptr->stack_delta = get_stack_delta(code_ptr->typ);
+  }
+}
+
 void cg_gen(CodeGen *cg) {
   gen_stmts(cg, cg->stmts);
   gen_halt(cg);
+  compute_stack_deltas(&cg->codes);
 }
 
 #ifndef NO_DEBUG
