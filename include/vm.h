@@ -9,10 +9,10 @@
 #endif
 
 typedef struct Stack {
-  int *top;
   int capacity;
-  // int *bottom;
+  int *top;
   int bottom[512];
+  // int *bottom;
 } Stack;
 
 typedef struct CyrVM {
