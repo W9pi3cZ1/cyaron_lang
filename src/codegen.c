@@ -26,76 +26,80 @@ CodeGen *cg_create(DynArr *stmts, DynArr *var_decls) {
 
 void cg_free(CodeGen *cg) { da_free(&cg->codes); }
 
-size_t gen_load_const(CodeGen *cg, int constant) {
+usize gen_load_const(CodeGen *cg, int constant) {
   OpCode *constant_op = da_try_push_back(&cg->codes);
   constant_op->typ = OP_LOAD_CONST;
   constant_op->data.constant = constant;
   return cg->codes.item_cnts - 1;
 }
 
-size_t gen_cmul(CodeGen *cg, int constant) {
+usize gen_cmul(CodeGen *cg, int constant) {
   OpCode *constant_op = da_try_push_back(&cg->codes);
   constant_op->typ = OP_CMUL;
   constant_op->data.constant = constant;
   return cg->codes.item_cnts - 1;
 }
 
-size_t gen_adds(CodeGen *cg, int term_cnts) {
-  switch (term_cnts) {
-  case 1:
-    return cg->codes.item_cnts - 1; // unreachable
-  case 2: {
+usize gen_adds(CodeGen *cg, int term_cnts) {
+  // switch (term_cnts) {
+  // case 1:
+  //   return cg->codes.item_cnts - 1; // unreachable
+  // case 2: {
+  //   OpCode *binadd_op = da_try_push_back(&cg->codes);
+  //   binadd_op->typ = OP_BINADD;
+  //   return cg->codes.item_cnts - 1;
+  // }
+  // case 3: {
+  //   OpCode *triadd_op = da_try_push_back(&cg->codes);
+  //   triadd_op->typ = OP_TRIADD;
+  //   return cg->codes.item_cnts - 1;
+  // }
+  // case 4: {
+  //   OpCode *quadadd_op = da_try_push_back(&cg->codes);
+  //   quadadd_op->typ = OP_QUADADD;
+  //   return cg->codes.item_cnts - 1;
+  // }
+  // default:
+  //   break;
+  // }
+  for (int i = 1; i < term_cnts; i++) {
     OpCode *binadd_op = da_try_push_back(&cg->codes);
     binadd_op->typ = OP_BINADD;
-    return cg->codes.item_cnts - 1;
   }
-  case 3: {
-    OpCode *triadd_op = da_try_push_back(&cg->codes);
-    triadd_op->typ = OP_TRIADD;
-    return cg->codes.item_cnts - 1;
-  }
-  case 4: {
-    OpCode *quadadd_op = da_try_push_back(&cg->codes);
-    quadadd_op->typ = OP_QUADADD;
-    return cg->codes.item_cnts - 1;
-  }
-  default:
-    break;
-  }
-  OpCode *adds_op = da_try_push_back(&cg->codes);
-  adds_op->typ = OP_ADDS;
-  adds_op->data.term_cnts = term_cnts;
+  // OpCode *adds_op = da_try_push_back(&cg->codes);
+  // adds_op->typ = OP_ADDS;
+  // adds_op->data.term_cnts = term_cnts;
   return cg->codes.item_cnts - 1;
 }
 
-size_t gen_put(CodeGen *cg) {
+usize gen_put(CodeGen *cg) {
   OpCode *put_op = da_try_push_back(&cg->codes);
   put_op->typ = OP_PUT;
   return cg->codes.item_cnts - 1;
 }
 
-size_t gen_jmp(CodeGen *cg, short offset) {
+usize gen_jmp(CodeGen *cg, short offset) {
   OpCode *jmp_op = da_try_push_back(&cg->codes);
   jmp_op->typ = OP_JMP;
   jmp_op->data.offset = offset;
   return cg->codes.item_cnts - 1;
 }
 
-// size_t gen_jz(CodeGen *cg, short offset) {
+// usize gen_jz(CodeGen *cg, short offset) {
 //   OpCode *jz_op = da_try_push_back(&cg->codes);
 //   jz_op->typ = OP_JZ;
 //   jz_op->data.offset = offset;
 //   return cg->codes.item_cnts - 1;
 // }
 
-// size_t gen_jnz(CodeGen *cg, short offset) {
+// usize gen_jnz(CodeGen *cg, short offset) {
 //   OpCode *jnz_op = da_try_push_back(&cg->codes);
 //   jnz_op->typ = OP_JNZ;
 //   jnz_op->data.offset = offset;
 //   return cg->codes.item_cnts - 1;
 // }
 
-size_t gen_incr(CodeGen *cg, int constant) {
+usize gen_incr(CodeGen *cg, int constant) {
   OpCode *incr_op = da_try_push_back(&cg->codes);
   incr_op->typ = OP_INCR;
   incr_op->data.constant = constant;
@@ -119,7 +123,7 @@ static inline enum CmpType reverse_cmp_typ(enum CmpType cmp_typ) {
   }
 }
 
-size_t gen_cjmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
+usize gen_cjmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
   OpCode *cjmp_op = da_try_push_back(&cg->codes);
   cjmp_op->typ = OP_CJMP;
   cjmp_op->data.cjmp.cmp_typ = cmp_typ;
@@ -127,7 +131,7 @@ size_t gen_cjmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
   return cg->codes.item_cnts - 1;
 }
 
-size_t gen_halt(CodeGen *cg) {
+usize gen_halt(CodeGen *cg) {
   OpCode *halt_op = da_try_push_back(&cg->codes);
   halt_op->typ = OP_HALT;
   return cg->codes.item_cnts - 1;
@@ -140,6 +144,7 @@ void gen_load_operand(CodeGen *cg, Operand *operand) {
   case OPERAND_INT_VAR: {
     OpCode *int_op = da_try_push_back(&cg->codes);
     int_op->data.ptr = (VarDecl *)(cg->var_decls->items) + operand->decl_idx;
+    // int_op->data.decl_idx = operand->decl_idx;
     int_op->typ = OP_LOAD_INT;
   } break;
   case OPERAND_ARR_ELEM: {
@@ -147,6 +152,7 @@ void gen_load_operand(CodeGen *cg, Operand *operand) {
     gen_expr(cg, &operand->idx_expr);
     OpCode *arr_op = da_try_push_back(&cg->codes);
     arr_op->data.ptr = (VarDecl *)(cg->var_decls->items) + operand->decl_idx;
+    // arr_op->data.decl_idx = operand->decl_idx;
     arr_op->typ = OP_LOAD_ARR;
   } break;
   }
@@ -154,19 +160,23 @@ void gen_load_operand(CodeGen *cg, Operand *operand) {
 
 void gen_store_operand(CodeGen *cg, Operand *operand) {
   VarDecl *var_decl_ptr = (VarDecl *)(cg->var_decls->items) + operand->decl_idx;
+  // int var_decl_idx = operand->decl_idx;
   switch (operand->typ) {
   case OPERAND_INT_VAR: {
     OpCode *int_op = da_try_push_back(&cg->codes);
 
     if ((cg->codes.item_cnts >= 3) && (int_op[-1].typ == OP_INCR) &&
         (int_op[-2].typ == OP_LOAD_INT) &&
-        (int_op[-2].data.ptr == var_decl_ptr)) {
+        (int_op[-2].data.ptr == var_decl_ptr
+         // int_op[-2].data.decl_idx == var_decl_idx
+         )) {
       // 特判优化
       // LOAD_I+INCR+STORE_I --> INCI
       cg->codes.item_cnts -= 2; // 缩容
       int_op[-2].typ = OP_INCI;
       int_op[-2].data.var_const.constant = int_op[-1].data.constant;
       int_op[-2].data.var_const.ptr = var_decl_ptr;
+      // int_op[-2].data.var_const.decl_idx = var_decl_idx;
       // :WARN: 不进行清理操作...
     } else if ((cg->codes.item_cnts >= 2) &&
                (int_op[-1].typ == OP_LOAD_CONST)) {
@@ -177,9 +187,11 @@ void gen_store_operand(CodeGen *cg, Operand *operand) {
       int_op[-1].typ = OP_SETI;
       int_op[-1].data.var_const.constant = constant;
       int_op[-1].data.var_const.ptr = var_decl_ptr;
+      // int_op[-1].data.var_const.decl_idx = var_decl_idx;
       // :WARN: 不进行清理操作...
     } else {
       int_op->data.ptr = var_decl_ptr;
+      // int_op->data.decl_idx = var_decl_idx;
       int_op->typ = OP_STORE_INT;
     }
   } break;
@@ -188,6 +200,7 @@ void gen_store_operand(CodeGen *cg, Operand *operand) {
     gen_expr(cg, &operand->idx_expr);
     OpCode *arr_op = da_try_push_back(&cg->codes);
     arr_op->data.ptr = var_decl_ptr;
+    // arr_op->data.decl_idx = var_decl_idx;
     arr_op->typ = OP_STORE_ARR;
   } break;
   }
@@ -354,13 +367,13 @@ void gen_expr(CodeGen *cg, Expr *expr) {
 //     gen_adds(cg, stack_items);
 // }
 
-size_t gen_cond(CodeGen *cg, Cond *cond, short offset) {
+usize gen_cond(CodeGen *cg, Cond *cond, short offset) {
   gen_expr(cg, &cond->right);
   gen_expr(cg, &cond->left);
   return gen_cjmp(cg, cond->typ, offset);
 }
 
-static OpCode *get_opcode(CodeGen *cg, size_t idx) {
+static OpCode *get_opcode(CodeGen *cg, usize idx) {
   return (OpCode *)da_get(&cg->codes, idx);
 }
 
@@ -371,17 +384,17 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
     case STMT_IHU_BLK: {
       IhuStmt *ihu_stmt = &stmt_ptr->inner.ihu;
       ihu_stmt->cond.typ = reverse_cmp_typ(ihu_stmt->cond.typ);
-      size_t try_skip = gen_cond(cg, &ihu_stmt->cond, 0);
+      usize try_skip = gen_cond(cg, &ihu_stmt->cond, 0);
       gen_stmts(cg, &ihu_stmt->stmts);
       get_opcode(cg, try_skip)->data.cjmp.offset =
           cg->codes.item_cnts - try_skip; // avoid use after free
     } break;
     case STMT_WHILE_BLK: {
       WhileStmt *while_stmt = &stmt_ptr->inner.while_stmt;
-      size_t jmp_cond = gen_jmp(cg, 0);
+      usize jmp_cond = gen_jmp(cg, 0);
       gen_stmts(cg, &while_stmt->stmts);
       int stmts_end = cg->codes.item_cnts;
-      size_t try_continue = gen_cond(cg, &while_stmt->cond, 0);
+      usize try_continue = gen_cond(cg, &while_stmt->cond, 0);
       get_opcode(cg, try_continue)->data.cjmp.offset =
           jmp_cond - try_continue + 1;
       get_opcode(cg, jmp_cond)->data.offset = stmts_end - jmp_cond;
@@ -390,7 +403,7 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
       HorStmt *hor_stmt = &stmt_ptr->inner.hor;
       gen_expr(cg, &hor_stmt->start);
       gen_store_operand(cg, &hor_stmt->var);
-      size_t try_skip = gen_jmp(cg, 0);
+      usize try_skip = gen_jmp(cg, 0);
       gen_stmts(cg, &hor_stmt->stmts);
       gen_load_operand(cg, &hor_stmt->var);
       gen_incr(cg, 1);
@@ -398,7 +411,7 @@ void gen_stmts(CodeGen *cg, DynArr *stmts) {
       int stmts_end = cg->codes.item_cnts;
       gen_expr(cg, &hor_stmt->end);
       gen_load_operand(cg, &hor_stmt->var);
-      size_t try_continue = gen_cjmp(cg, CMP_LE, 0);
+      usize try_continue = gen_cjmp(cg, CMP_LE, 0);
       get_opcode(cg, try_continue)->data.cjmp.offset =
           try_skip - try_continue + 1;
       get_opcode(cg, try_skip)->data.offset = stmts_end - try_skip;
@@ -476,6 +489,7 @@ void cg_debug(CodeGen *cg) {
     case OP_STORE_ARR: {
       VarDecl *decl_ptr = code_ptr->data.ptr;
       printf("ptr: %p(#%hd)", decl_ptr, decl_ptr->decl_idx);
+      // printf("decl_idx: #%hu", code_ptr->data.decl_idx);
     } break;
     case OP_JMP:
       printf("offset: %hd", code_ptr->data.offset);
@@ -490,17 +504,19 @@ void cg_debug(CodeGen *cg) {
       VarDecl *decl_ptr = code_ptr->data.var_const.ptr;
       printf("ptr: %p(#%hd), const: %d", decl_ptr, decl_ptr->decl_idx,
              code_ptr->data.var_const.constant);
+      // printf("decl_idx: #%hu, const: %d", code_ptr->data.decl_idx,
+      //        code_ptr->data.var_const.constant);
     } break;
     // case OP_CMP:
     //   printf("cmp_typ: %s",
     //          debug_token_type(code_ptr->data.cmp_typ + TOK_CMP_LT - 1));
     //   break;
-    case OP_ADDS:
-      printf("term_cnts: %d", code_ptr->data.term_cnts);
-      break;
+    // case OP_ADDS:
+    //   printf("term_cnts: %d", code_ptr->data.term_cnts);
+    //   break;
     case OP_BINADD:
-    case OP_TRIADD:
-    case OP_QUADADD:
+    // case OP_TRIADD:
+    // case OP_QUADADD:
     case OP_PUT:
     case OP_HALT:
       break;

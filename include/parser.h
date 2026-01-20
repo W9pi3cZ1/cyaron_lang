@@ -132,13 +132,15 @@ typedef struct Stmt {
 
 typedef struct Parser {
   DynArr *toks;     // Token *
-  size_t pos;       // position about the currnet the token
+  usize pos;        // position about the currnet the token
   DynArr stmts;     // Stmt *
   DynArr var_decls; // VarDecl *
 } Parser;
 
 void parser_init(Parser *parser, DynArr *toks);
 Parser *parser_create(DynArr *toks);
+void parser_free_vars(Parser *parser);
+void parser_free_stmts(Parser *parser);
 void parser_free(Parser *parser);
 unsigned short operand_finder(Parser *parser, const char *var_name,
                               enum OperandTyp type);

@@ -16,28 +16,30 @@ enum OpCodeType {
 };
 
 typedef struct CondJmp {
-  enum CmpType cmp_typ;
+  enum CmpType cmp_typ : 16;
   short offset;
-} CondJmp;
+} __attribute__((packed)) CondJmp;
 
-typedef struct IncVar {
+typedef struct VarConst {
   VarDecl *ptr;
+  // unsigned short decl_idx;
   int constant;
-} VarConst;
+} __attribute__((packed)) VarConst;
 
 typedef struct OpCode {
-  enum OpCodeType typ;
+  enum OpCodeType typ : 8;
   int stack_delta;
   union OpCodeData {
     short offset;
     int constant;
-    int term_cnts;
+    // int term_cnts;
     VarDecl *ptr;
+    // unsigned short decl_idx;
     CondJmp cjmp;
     VarConst var_const;
     // enum CmpType cmp_typ;
-  } data;
-} OpCode;
+  } __attribute__((packed)) data;
+} __attribute__((packed)) OpCode;
 
 typedef struct CodeGen {
   DynArr codes;

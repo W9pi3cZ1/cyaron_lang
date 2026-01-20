@@ -46,7 +46,7 @@ void err_log(const char *fmt, ...) {
 }
 #endif
 
-void da_init(DynArr *dyn_arr, size_t item_size, size_t capacity) {
+void da_init(DynArr *dyn_arr, usize item_size, usize capacity) {
   dyn_arr->item_cnts = 0;
   dyn_arr->capacity = capacity;
   dyn_arr->item_size = item_size;
@@ -57,25 +57,10 @@ void da_init(DynArr *dyn_arr, size_t item_size, size_t capacity) {
   // }
 }
 
-DynArr *da_create(size_t item_size, size_t capacity) {
+DynArr *da_create(usize item_size, usize capacity) {
   DynArr *dyn_arr = malloc(sizeof(DynArr));
   da_init(dyn_arr, item_size, capacity);
   return dyn_arr;
-}
-
-void *da_try_push_back(DynArr *dyn_arr) {
-  if (dyn_arr->item_cnts >= dyn_arr->capacity) {
-    dyn_arr->capacity *= 2; // 2x Extend
-    dyn_arr->items =
-        realloc(dyn_arr->items, dyn_arr->capacity * dyn_arr->item_size);
-    // if (dyn_arr->items == NULL) {
-    //   err_log("Failed to Re-Allocate %zu Items (in %s)\n", dyn_arr->capacity,
-    //           __FUNCTION__);
-    // }
-  }
-  void *dest = dyn_arr->items + dyn_arr->item_cnts * dyn_arr->item_size;
-  ++dyn_arr->item_cnts;
-  return dest;
 }
 
 void *da_push_back(DynArr *dyn_arr, void *item) {
@@ -86,7 +71,7 @@ void *da_push_back(DynArr *dyn_arr, void *item) {
 
 void da_free(DynArr *dyn_arr) { free(dyn_arr->items); }
 
-void str_pool_init(StrPool *pool, size_t mempool_size, size_t capacity) {
+void str_pool_init(StrPool *pool, usize mempool_size, usize capacity) {
   pool->mempool_size = mempool_size;
   pool->mempool = malloc(mempool_size);
   // if (!pool->mempool) {
@@ -96,7 +81,7 @@ void str_pool_init(StrPool *pool, size_t mempool_size, size_t capacity) {
   return;
 }
 
-StrPool *str_pool_create(size_t mempool_size, size_t capacity) {
+StrPool *str_pool_create(usize mempool_size, usize capacity) {
   StrPool *pool = malloc(sizeof(StrPool));
   str_pool_init(pool, mempool_size, capacity);
   return pool;
@@ -104,7 +89,7 @@ StrPool *str_pool_create(size_t mempool_size, size_t capacity) {
 
 void str_pool_free(StrPool *str_pool) {
   StrPoolNode *node = str_pool->pool_nodes.items;
-  for (size_t i = 0; i < str_pool->pool_nodes.item_cnts; i++, node++) {
+  for (usize i = 0; i < str_pool->pool_nodes.item_cnts; i++, node++) {
     if (!node->alloc_by_pool) {
       free(node->str);
     }
@@ -113,13 +98,14 @@ void str_pool_free(StrPool *str_pool) {
   free(str_pool->mempool);
   return;
 }
-char *str_pool_intern(StrPool *str_pool, const char *string, size_t len) {
+char *str_pool_intern(StrPool *str_pool, const char *string, usize len) {
   StrPoolNode *dest_node = NULL;
-  size_t str_node_cnts = str_pool->pool_nodes.item_cnts;
+  usize str_node_cnts = str_pool->pool_nodes.item_cnts;
   // Check if exist
   dest_node = str_pool->pool_nodes.items;
-  for (size_t i = 0; i < str_node_cnts; i++, dest_node++) {
-    if (dest_node->len == len && (strncmp(dest_node->str, string, len) == 0)) {
+  for (usize i = 0; i < str_node_cnts; i++, dest_node++) {
+    if (dest_node->len == len &&
+        (lite_strncmp(dest_node->str, string, len) == 0)) {
       return dest_node->str;
     }
   }
@@ -143,9 +129,9 @@ char *str_pool_intern(StrPool *str_pool, const char *string, size_t len) {
 void debug_str_pool(StrPool *str_pool) {
   logger("String Pool:\n");
   StrPoolNode *str_node = NULL;
-  size_t str_node_cnts = str_pool->pool_nodes.item_cnts;
+  usize str_node_cnts = str_pool->pool_nodes.item_cnts;
   char *node_str = NULL;
-  for (size_t i = 0; i < str_node_cnts; i++) {
+  for (usize i = 0; i < str_node_cnts; i++) {
     str_node = da_get(&str_pool->pool_nodes, i);
     node_str = str_node->str;
     logger("[%zu] = \"%s\" (%zu)\n", i, node_str, str_node->len);

@@ -15,13 +15,13 @@
 
 typedef struct Interpreter {
   DynArr *stmts; // Stmt *
-  // size_t exec_ptr;
+  // usize exec_ptr;
   DynArr *var_decls; // VarDecl<VarData> *
 #ifndef NO_DEBUG
   struct InterpreterStats {
-    size_t operand_read;
-    size_t operand_write;
-    size_t expression_eval;
+    usize operand_read;
+    usize operand_write;
+    usize expression_eval;
   } stats;
 #endif
 } Interpreter;

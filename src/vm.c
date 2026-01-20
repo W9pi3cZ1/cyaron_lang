@@ -51,46 +51,56 @@ CyrVM *cyr_vm_create(DynArr *var_decls, DynArr *codes) {
 }
 
 int *arr_ref(VarDecl *decl, int idx) {
+  // VarDecl *decl = decl_idx + (VarDecl *)vm->var_decls->items;
   return &decl->data.a.arr[idx - decl->start];
 }
 
-int *int_ref(VarDecl *decl) { return &decl->data.i.val; }
+int *int_ref(VarDecl *decl) {
+  // VarDecl *decl = decl_idx + (VarDecl *)vm->var_decls->items;
+  return &decl->data.i.val;
+}
 
-typedef short (*vm_handler)(Stack *stack, union OpCodeData dat);
+typedef short (*vm_handler)(CyrVM *vm, Stack *stack, union OpCodeData dat);
+#define DECL_VM_HANDLE(x) short x(CyrVM *vm, Stack *stack, union OpCodeData dat)
 
-short load_const(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(load_const) {
   stack->top[1] = dat.constant;
   return 1;
 }
 
-short load_int(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(load_int) {
+  // stack->top[1] = *int_ref(vm, dat.decl_idx);
   stack->top[1] = *int_ref(dat.ptr);
   return 1;
 }
 
-short load_arr(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(load_arr) {
   int idx = stack->top[1];
+  // stack->top[1] = *arr_ref(vm, dat.decl_idx, idx);
   stack->top[1] = *arr_ref(dat.ptr, idx);
   return 1;
 }
 
-short store_int(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(store_int) {
+  // *int_ref(vm, dat.decl_idx) = stack->top[0];
   *int_ref(dat.ptr) = stack->top[0];
   return 1;
 }
 
-short store_arr(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(store_arr) {
   int idx = stack->top[-1];
+  // *arr_ref(vm, dat.decl_idx, idx) = stack->top[0];
   *arr_ref(dat.ptr, idx) = stack->top[0];
   return 1;
 }
 
-short seti(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(seti) {
+  // *int_ref(vm, dat.var_const.decl_idx) = dat.var_const.constant;
   *int_ref(dat.var_const.ptr) = dat.var_const.constant;
   return 1;
 }
 
-short jmp(Stack *stack, union OpCodeData dat) { return dat.offset; }
+DECL_VM_HANDLE(jmp) { return dat.offset; }
 
 char do_cmp(enum CmpType cond_typ, int left, int right) {
   // Assume it always within range ...
@@ -111,7 +121,7 @@ char do_cmp(enum CmpType cond_typ, int left, int right) {
   return (cond_typ >> (gt + ge)) & 1;
 };
 
-short cjmp(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(cjmp) {
   int left = stack->top[-1];
   int right = stack->top[0];
 
@@ -125,72 +135,73 @@ short cjmp(Stack *stack, union OpCodeData dat) {
 //   return 1;
 // }
 
-short incr(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(incr) {
   stack->top[1] += dat.constant;
   return 1;
 }
 
-short inci(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(inci) {
+  // *int_ref(vm, dat.var_const.decl_idx) += dat.var_const.constant;
   *int_ref(dat.var_const.ptr) += dat.var_const.constant;
   return 1;
 }
 
-short binadd(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(binadd) {
   stack->top[1] += stack->top[0];
   return 1;
 }
 
-short triadd(Stack *stack, union OpCodeData dat) {
-  stack->top[1] += stack->top[0] + stack->top[-1];
+// DECL_VM_HANDLE(triadd) {
+//   stack->top[1] += stack->top[0] + stack->top[-1];
+//   return 1;
+// }
+
+// DECL_VM_HANDLE(quadadd) {
+//   stack->top[1] += stack->top[0] + stack->top[-1] + stack->top[-2];
+//   return 1;
+// }
+
+// DECL_VM_HANDLE(adds) {
+//   stack->top++;
+//   int *res = stack->top;
+//   for (int i = 1; i < dat.term_cnts; i++) {
+//     *res += stack->top[i];
+//   }
+//   stack->top += dat.term_cnts - 2;
+//   return 1;
+// }
+
+DECL_VM_HANDLE(cmul) {
+  stack->top[1] *= dat.constant;
   return 1;
 }
 
-short quadadd(Stack *stack, union OpCodeData dat) {
-  stack->top[1] += stack->top[0] + stack->top[-1] + stack->top[-2];
-  return 1;
-}
+DECL_VM_HANDLE(empty_func) { return 1; }
 
-short adds(Stack *stack, union OpCodeData dat) {
-  stack->top++;
-  int *res = stack->top;
-  for (int i = 1; i < dat.term_cnts; i++) {
-    *res += stack->top[i];
-  }
-  stack->top += dat.term_cnts - 2;
-  return 1;
-}
-
-short cmul(Stack *stack, union OpCodeData dat) {
-  stack->top[-1] *= dat.constant;
-  return 1;
-}
-
-short empty_func(Stack *stack, union OpCodeData dat) { return 1; }
-
-short put(Stack *stack, union OpCodeData dat) {
+DECL_VM_HANDLE(put) {
   printf("%d ", stack->top[0]);
   return 1;
 }
 
-static vm_handler handlers[] = {
-    [OP_LOAD_CONST] = load_const,
-    [OP_LOAD_INT] = load_int,
-    [OP_LOAD_ARR] = load_arr,
-    [OP_STORE_INT] = store_int,
-    [OP_STORE_ARR] = store_arr,
-    [OP_SETI] = seti,
-    [OP_JMP] = jmp,
-    [OP_CJMP] = cjmp,
-    [OP_INCR] = incr,
-    [OP_INCI] = inci,
-    [OP_BINADD] = binadd,
-    [OP_TRIADD] = triadd,
-    [OP_QUADADD] = quadadd,
-    [OP_ADDS] = adds,
-    [OP_CMUL] = cmul,
-    [OP_PUT] = put,
-    [OP_HALT] = empty_func,
-};
+// static vm_handler handlers[] = {
+//     [OP_LOAD_CONST] = load_const,
+//     [OP_LOAD_INT] = load_int,
+//     [OP_LOAD_ARR] = load_arr,
+//     [OP_STORE_INT] = store_int,
+//     [OP_STORE_ARR] = store_arr,
+//     [OP_SETI] = seti,
+//     [OP_INCR] = incr,
+//     [OP_INCI] = inci,
+//     [OP_CMUL] = cmul,
+//     [OP_BINADD] = binadd,
+//     [OP_PUT] = put,
+//     [OP_JMP] = jmp,
+//     [OP_CJMP] = cjmp,
+//     [OP_HALT] = empty_func,
+//     // [OP_TRIADD] = triadd,
+//     // [OP_QUADADD] = quadadd,
+//     // [OP_ADDS] = adds,
+// };
 
 #define ST_PO(x) (0 + (x))
 
@@ -198,21 +209,22 @@ static int stack_deltas[] = {
     [OP_LOAD_CONST] = ST_PO(-1), [OP_LOAD_INT] = ST_PO(-1),
     [OP_LOAD_ARR] = ST_PO(0),    [OP_STORE_INT] = ST_PO(1),
     [OP_STORE_ARR] = ST_PO(2),   [OP_SETI] = ST_PO(0),
-    [OP_JMP] = ST_PO(0),         [OP_CJMP] = ST_PO(2),
     [OP_INCR] = ST_PO(0),        [OP_INCI] = ST_PO(0),
-    [OP_BINADD] = ST_PO(1),      [OP_TRIADD] = ST_PO(2),
-    [OP_QUADADD] = ST_PO(3),     [OP_ADDS] = ST_PO(0),
-    [OP_CMUL] = ST_PO(0),        [OP_PUT] = ST_PO(1),
-    [OP_HALT] = ST_PO(0),
+    [OP_CMUL] = ST_PO(0),        [OP_BINADD] = ST_PO(1),
+    [OP_PUT] = ST_PO(1),         [OP_JMP] = ST_PO(0),
+    [OP_CJMP] = ST_PO(2),        [OP_HALT] = ST_PO(0),
+    // [OP_TRIADD] = ST_PO(2),      [OP_QUADADD] = ST_PO(3),
+    // [OP_ADDS] = ST_PO(0),
 };
 
 int get_stack_delta(enum OpCodeType typ) {
   return stack_deltas[typ] - ST_PO(0);
 }
 
-short bad_commands(Stack *stack, enum OpCodeType typ, union OpCodeData dat) {
-  return handlers[typ](stack, dat);
-}
+// short bad_commands(CyrVM *vm, Stack *stack, enum OpCodeType typ,
+//                    union OpCodeData dat) {
+//   return handlers[typ](vm, stack, dat);
+// }
 
 void cyr_vm_execute(CyrVM *cyr_vm) {
   Stack stack;
@@ -222,73 +234,71 @@ void cyr_vm_execute(CyrVM *cyr_vm) {
   enum OpCodeType typ = op_ptr->typ;
 #ifndef NO_DEBUG
   int cnts = 0;
-  int bad_cnts = 0;
+  // int bad_cnts = 0;
 #endif
   while (1) {
 #ifndef NO_DEBUG
     cnts++;
-    // printf("%s\n", op_code_type(op_ptr->typ));
+    printf("%s\n", op_code_type(op_ptr->typ));
 #endif
     typ = op_ptr->typ;
     dat = op_ptr->data;
     stack.top += op_ptr->stack_delta;
+#define EXEC(x) x(cyr_vm, &stack, dat)
     switch (typ) {
     case OP_LOAD_CONST:
-      load_const(&stack, dat);
+      EXEC(load_const);
       break;
     case OP_LOAD_INT:
-      load_int(&stack, dat);
+      EXEC(load_int);
       break;
     case OP_LOAD_ARR:
-      load_arr(&stack, dat);
+      EXEC(load_arr);
       break;
     case OP_STORE_INT:
-      store_int(&stack, dat);
+      EXEC(store_int);
       break;
     case OP_STORE_ARR:
-      store_arr(&stack, dat);
+      EXEC(store_arr);
       break;
     case OP_SETI:
-      seti(&stack, dat);
-      break;
-    case OP_CMUL:
-      cmul(&stack, dat);
-      break;
-    case OP_BINADD:
-      binadd(&stack, dat);
+      EXEC(seti);
       break;
     case OP_INCR:
-      incr(&stack, dat);
+      EXEC(incr);
       break;
     case OP_INCI:
-      inci(&stack, dat);
+      EXEC(inci);
+      break;
+    case OP_CMUL:
+      EXEC(cmul);
+      break;
+    case OP_BINADD:
+      EXEC(binadd);
+      break;
+    case OP_PUT:
+      EXEC(put);
       break;
     case OP_JMP:
-      op_ptr += jmp(&stack, dat);
+      op_ptr += EXEC(jmp);
       continue;
     case OP_CJMP:
-      op_ptr += cjmp(&stack, dat);
+      op_ptr += EXEC(cjmp);
       continue;
-    default:
-#ifndef NO_DEBUG
-      bad_cnts++;
-#endif
-      bad_commands(&stack, typ, dat);
-      break;
     case OP_HALT:
-      goto end;
+#ifndef NO_DEBUG
+      // printf("\nDispatched bad commands of %d(%d%%)\n", bad_cnts,
+      //        bad_cnts * 100 / cnts);
+      // printf("Dispatched good commands of %d(%d%%)\n", cnts - bad_cnts,
+      //        100 - (bad_cnts * 100 / cnts));
+      printf("Dispatched commands of %d(100%%)\n", cnts);
+#endif
+      return;
+    default:
+      __builtin_unreachable();
     }
     op_ptr++;
   }
-end:
-#ifndef NO_DEBUG
-  printf("\nDispatched bad commands of %d(%d%%)\n", bad_cnts,
-         bad_cnts * 100 / cnts);
-  printf("Dispatched good commands of %d(%d%%)\n", cnts - bad_cnts,
-         100 - (bad_cnts * 100 / cnts));
-  printf("Dispatched commands of %d(100%%)\n", cnts);
-#endif
-  return;
 }
 
 #endif

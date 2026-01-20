@@ -27,7 +27,7 @@ const char *debug_token_type(enum TokType tok_type) {
 
 void lexer_init(Lexer *lexer, char *src) {
   memset(lexer, 0, sizeof(Lexer));
-  str_pool_init(&lexer->tok_val_pool, 512, 16);
+  str_pool_init(&lexer->tok_val_pool, 256, 20);
   lexer->src_len = strlen(src);
   lexer->src = src;
   // lexer->src = malloc(lexer->src_len);
@@ -79,7 +79,7 @@ inline static char is_identifier_char(char c) { return isalpha(c) || c == '_'; }
 const struct KeyWords {
   const enum TokType typ;
   const char *val;
-  const size_t len;
+  const usize len;
 } keywords[] = {
     KEYWORD(TOK_KEYWORD_VARS, "vars"),
     KEYWORD(TOK_KEYWORD_SET, "set"),
@@ -97,13 +97,13 @@ const struct KeyWords {
     KEYWORD(TOK_CMP_EQ, "eq"),
 };
 
-const size_t keyword_cnts = sizeof(keywords) / sizeof(*keywords);
+const usize keyword_cnts = sizeof(keywords) / sizeof(*keywords);
 
-int check_keyword(const char *tok_val, size_t len) {
+int check_keyword(const char *tok_val, usize len) {
   const struct KeyWords *keyword_ptr = keywords;
   for (int i = 0; i < keyword_cnts; ++i, ++keyword_ptr) {
     if (keyword_ptr->len == len &&
-        strncmp(tok_val, keyword_ptr->val, len) == 0) {
+        lite_strncmp(tok_val, keyword_ptr->val, len) == 0) {
       return i;
     }
   }
@@ -121,12 +121,12 @@ void lexer_tokenize(Lexer *lexer) {
 
     if (isdigit(ch)) {
       // Number literal
-      size_t start = lexer->ch_pos;
+      usize start = lexer->ch_pos;
       while (lexer->ch_pos < lexer->src_len &&
              isdigit(lexer->src[lexer->ch_pos])) {
         lexer->ch_pos++;
       }
-      size_t len = lexer->ch_pos - start;
+      usize len = lexer->ch_pos - start;
       char *val = lexer->src + start;
       val = str_pool_intern(&lexer->tok_val_pool, val, len);
       add_token(lexer, TOK_INT, val);
@@ -135,12 +135,12 @@ void lexer_tokenize(Lexer *lexer) {
 
     if (is_identifier_char(ch)) {
       // Identifier or Keyword
-      size_t start = lexer->ch_pos;
+      usize start = lexer->ch_pos;
       while (lexer->ch_pos < lexer->src_len &&
              isalnum(lexer->src[lexer->ch_pos])) {
         lexer->ch_pos++;
       }
-      size_t len = lexer->ch_pos - start;
+      usize len = lexer->ch_pos - start;
       const char *val = lexer->src + start;
       // Check keywords
       int keyword_idx = check_keyword(val, len);
@@ -206,7 +206,7 @@ void debug_lexer(Lexer *lexer) {
          "    toks.arr: [\n",
          lexer->ch_pos, lexer->src, lexer->src_len);
   Token *tok_ptr = NULL;
-  for (size_t i = 0; i < lexer->toks.item_cnts; i++) {
+  for (usize i = 0; i < lexer->toks.item_cnts; i++) {
     tok_ptr = &((Token *)lexer->toks.items)[i];
     logger("        %s(%s),\n", debug_token_type(tok_ptr->type), tok_ptr->str);
   }

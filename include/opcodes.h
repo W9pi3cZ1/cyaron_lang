@@ -20,18 +20,6 @@ OPCODE(OP_STORE_ARR)  // STORE_ARR(ptr: decl*)[idx: i32, val: i32]
 OPCODE(OP_SETI)       // SETI(ptr: decl*, const: i32)
                       // -> *int_ref(ptr) = const
 
-OPCODE(OP_JMP) // (Directly)JMP(offset: i16)
-               // -> exec_ptr += offset
-// OPCODE(OP_JZ)  // (If !cond)JZ(offset: i16)[cond: i8]
-//                // -> exec_ptr += pop(cond)? 1 : offset
-// OPCODE(OP_JNZ) // (If cond)JNZ(offset: i16)[cond: i8]
-//                // -> exec_ptr += pop(cond)? offset : 1
-
-// OPCODE(OP_CMP) // CMP(cmp_type: CmpType)[left: i32, right: i32]
-//                // -> push(cmp(cmp_type, pop(left), pop(right))?1:0)
-OPCODE(OP_CJMP) // CJMP(cmp_type: CmpType, offset: i16)[left: i32, right: i32]
-                // -> if cmp(pop(left), pop(right)): jmp(offset)
-
 OPCODE(OP_INCR) // INCR(const: i32)[num: i32]
                 // -> push(pop(num)+const)
 OPCODE(OP_INCI) // INCI(ptr: decl*, const: i32)
@@ -39,19 +27,26 @@ OPCODE(OP_INCI) // INCI(ptr: decl*, const: i32)
 // The below one is hard to impl ..
 // OPCODE(OP_INCA)    // INCA(ptr: decl*, const: i32)[idx: i32]
 //                    // -> *arr_ref(ptr, pop(idx)) += const
-OPCODE(OP_BINADD)  // BINADD[a1: i32, a2: i32]
-                   // -> push(pop(a1)+pop(a2))
-OPCODE(OP_TRIADD)  // TRIADD[a1: i32, a2: i32, a3: i32]
-                   // -> push(pop(a1)+pop(a2)+pop(a3))
-OPCODE(OP_QUADADD) // QUADADD[a1: i32, a2: i32, a3: i32, a4: i32]
-                   // -> push(pop(a1)+pop(a2)+pop(a3)+pop(a4))
-OPCODE(OP_ADDS)    // ADDS(term_cnts: i32)[a1: i32, a2: i32, ...]
-                   // -> push(pop(a1)+pop(a2)+pop(a3)+...)
-OPCODE(OP_CMUL)    // (Constant Mul) CMUL(const: i32)[a: i32]
-                   // push(const*pop(a))
-OPCODE(OP_PUT)     // PUT[num: i32]
-                   // -> print_num(pop(num))
-OPCODE(OP_HALT)    // HALT
+OPCODE(OP_CMUL)   // (Constant Mul) CMUL(const: i32)[a: i32]
+                  // push(const*pop(a))
+OPCODE(OP_BINADD) // BINADD[a1: i32, a2: i32]
+                  // -> push(pop(a1)+pop(a2))
+
+OPCODE(OP_PUT)  // PUT[num: i32]
+                // -> print_num(pop(num))
+OPCODE(OP_JMP)  // (Directly)JMP(offset: i16)
+                // -> exec_ptr += offset
+OPCODE(OP_CJMP) // CJMP(cmp_type: CmpType, offset: i16)[left: i32, right: i32]
+                // -> if cmp(pop(left), pop(right)): jmp(offset)
+OPCODE(OP_HALT) // HALT
+
+//- Deprecated -//
+// OPCODE(OP_TRIADD)  // TRIADD[a1: i32, a2: i32, a3: i32]
+//                    // -> push(pop(a1)+pop(a2)+pop(a3))
+// OPCODE(OP_QUADADD) // QUADADD[a1: i32, a2: i32, a3: i32, a4: i32]
+//                    // -> push(pop(a1)+pop(a2)+pop(a3)+pop(a4))
+// OPCODE(OP_ADDS)    // ADDS(term_cnts: i32)[a1: i32, a2: i32, ...]
+//                    // -> push(pop(a1)+pop(a2)+pop(a3)+...)
 
 #ifdef DEFAULT_DEF
 #undef DEFAULT_DEF

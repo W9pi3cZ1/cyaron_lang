@@ -9,16 +9,16 @@
 #endif
 
 typedef struct Stack {
-  int capacity;
   int *top;
   int bottom[512];
   // int *bottom;
+  int capacity;
 } Stack;
 
 typedef struct CyrVM {
-  DynArr *var_decls;
   DynArr *codes;
   // Stack stack;
+  DynArr *var_decls;
 } CyrVM;
 
 int get_stack_delta(enum OpCodeType typ);

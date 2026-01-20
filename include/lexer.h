@@ -25,8 +25,8 @@ typedef struct Token {
 
 typedef struct Lexer {
   char *src;
-  size_t src_len;
-  size_t ch_pos;
+  usize src_len;
+  usize ch_pos;
   DynArr toks; // Always store Token(s)
   StrPool tok_val_pool;
 } Lexer;

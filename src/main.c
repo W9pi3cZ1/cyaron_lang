@@ -68,7 +68,7 @@ void read_src(char **src) {
   time_spent = (end - start) * 1000000 / CLOCKS_PER_SEC;                       \
   printf("\n%s() completed in %zu us.\n", #func, time_spent)
 #else
-#define CLOCK_FUNC(start, end, time_spent, func, ...) func(__VA_ARGS__);
+#define CLOCK_FUNC(start, end, time_spent, func, ...) func(__VA_ARGS__)
 #endif
 
 void test() {
@@ -104,10 +104,12 @@ void test() {
 #ifndef NO_DEBUG
   cg_debug(&cg);
 #endif
+  parser_free_stmts(&parser);
   CyrVM cyr_vm;
   cyr_vm_init(&cyr_vm, &parser.var_decls, &cg.codes);
   CLOCK_FUNC(start_time, end_time, time_spent, cyr_vm_execute, &cyr_vm);
   cg_free(&cg);
+  parser_free_vars(&parser);
 
 #else
 
@@ -122,7 +124,10 @@ void test() {
   interpreter_free(&interpreter);
 
 #endif
+
+#ifndef CODEGEN
   parser_free(&parser);
+#endif
   lexer_free(&lexer);
   free(src);
 }

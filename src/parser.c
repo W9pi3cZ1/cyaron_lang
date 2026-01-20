@@ -72,7 +72,7 @@ void free_stmts(DynArr *stmts) {
   da_free(stmts);
 }
 
-void parser_free(Parser *parser) {
+void parser_free_vars(Parser *parser) {
   VarDecl *var_decl = parser->var_decls.items;
   for (int i = 0; i < parser->var_decls.item_cnts; i++, var_decl++) {
     if (var_decl->typ == VAR_ARR) {
@@ -80,8 +80,14 @@ void parser_free(Parser *parser) {
       free(arr_data->arr);
     }
   }
-  free_stmts(&parser->stmts);
   da_free(&parser->var_decls);
+}
+
+void parser_free_stmts(Parser *parser) { free_stmts(&parser->stmts); }
+
+void parser_free(Parser *parser) {
+  parser_free_vars(parser);
+  parser_free_stmts(parser);
 }
 
 static Token *current_token(Parser *parser) {
@@ -91,7 +97,7 @@ static Token *current_token(Parser *parser) {
   return da_get(parser->toks, parser->pos);
 }
 
-static Token *peek_token(Parser *parser, size_t offset) {
+static Token *peek_token(Parser *parser, usize offset) {
   if (parser->pos + offset >= parser->toks->item_cnts) {
     return NULL;
   }
@@ -461,7 +467,7 @@ static void printf_indent(int indent, const char *fmt, ...) {
 void debug_expr(Expr *expr);
 
 void debug_operand(Operand *operand) {
-  printf("#%hd", operand->decl_idx);
+  printf("#%hu", operand->decl_idx);
   switch (operand->typ) {
   case OPERAND_INT_VAR:
     break;

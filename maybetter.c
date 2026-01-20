@@ -1,4 +1,4 @@
-/* Code from [Luogu R225422243](https://www.luogu.com.cn/record/225422243) */
+/* Code from [Luogu R256198099](https://www.luogu.com.cn/record/256198099) */
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -9,7 +9,19 @@
 
 #define INBUF_SIZE (1 << 12)
 #define OUTBUF_SIZE (1 << 5)
-#define TOKEN_POOL_SIZE (1 << 9)
+#define TOKEN_POOL_SIZE (1 << 12)
+
+typedef struct {
+  char *name;
+  uint8_t is_array;
+  union {
+    int32_t num;
+    struct {
+      int32_t base;
+      int32_t *data;
+    } array;
+  };
+} variable_t;
 
 #define TOK_NONE (0)
 #define TOK_LBRACE (1)
@@ -24,6 +36,8 @@
 #define TOK_NUM (10)
 #define TOK_ADD (11)
 #define TOK_SUB (12)
+#define TOK_EXT_SKIP (13)
+#define TOK_EXT_VAROFF (14)
 
 #define KEYWORD_NONE (0)
 #define KEYWORD_SET (1)
@@ -32,37 +46,39 @@
 #define KEYWORD_IHU (4)
 #define KEYWORD_HOR (5)
 #define KEYWORD_WHILE (6)
+
+#define ANALYZE_STAGE_NONE (0)
+#define ANALYZE_STAGE_DONE (1)
+#define ANALYZE_STAGE_SKIP (2)
 typedef struct __node {
-  struct __node *next;
-  uint16_t type;
+  // struct __node *next;
+  uint16_t analyzer_data;
+  uint8_t analyze_stage;
+  uint8_t type;
   union {
     uint8_t keyword;
     char *ident;
-    int32_t num;
+    struct {
+      int32_t num;
+      int32_t varoff_attr; // 正负号代表var取值的正负
+                           // 绝对值表示跳过的token数(因为正常set肯定比varoff长)
+    };
     struct __node *brace_ref;
   };
+  variable_t *var_ptr;
 } token_t;
 
-typedef struct {
-  char *name;
-  int is_array;
-  union {
-    int32_t num;
-    struct {
-      int32_t base;
-      int32_t *data;
-    } array;
-  };
-} variable_t;
+#define CMP_EQ_BIT (1 << 0)
+#define CMP_GT_BIT (1 << 1)
+#define CMP_WITHSZCMP_BIT (1 << 2)
+#define CMP_LT (CMP_WITHSZCMP_BIT)
+#define CMP_GT (CMP_WITHSZCMP_BIT | CMP_GT_BIT)
+#define CMP_LE (CMP_WITHSZCMP_BIT | CMP_EQ_BIT)
+#define CMP_GE (CMP_WITHSZCMP_BIT | CMP_EQ_BIT | CMP_GT_BIT)
+#define CMP_EQ (CMP_EQ_BIT)
+#define CMP_NEQ (0)
 
-#define CMP_LT (0)
-#define CMP_GT (1)
-#define CMP_LE (2)
-#define CMP_GE (3)
-#define CMP_EQ (4)
-#define CMP_NEQ (5)
-
-typedef char stringtable_entry_t[64];
+typedef char stringtable_entry_t[16];
 
 char inbuf[INBUF_SIZE];
 char outbuf[OUTBUF_SIZE];
@@ -82,26 +98,30 @@ int string_table_idx = 8;
 
 int variable_table_idx = 0;
 
+void dump_tokens(token_t *tok);
+
 static inline void fill_inbuf() {
   inbuf_remain = read(0, inbuf, INBUF_SIZE);
   inptr = inbuf;
 }
 
 static inline char gc() {
-  // if (inbuf_remain <= 0) fill_inbuf();
+  if (inbuf_remain <= 0)
+    fill_inbuf();
   return (inbuf_remain <= 0) ? -1 : *inptr++;
 }
 
 static inline char pc() {
-  // if (inbuf_remain <= 0) fill_inbuf();
+  if (inbuf_remain <= 0)
+    fill_inbuf();
   return (inbuf_remain <= 0) ? -1 : *inptr;
 }
 
 static inline void sc(int n) {
-  // while (n > inbuf_remain) {
-  //   n -= inbuf_remain;
-  //   fill_inbuf();
-  // }
+  while (n > inbuf_remain) {
+    n -= inbuf_remain;
+    fill_inbuf();
+  }
 
   inptr += n;
   inbuf_remain -= n;
@@ -128,7 +148,8 @@ static inline void flush_output() {
 }
 
 static inline void print_int(int32_t n) {
-  // if (outbuf_pos > OUTBUF_SIZE - 12) flush_output();
+  if (outbuf_pos > OUTBUF_SIZE - 12)
+    flush_output();
 
   char buf[12];
   int i = 11;
@@ -151,40 +172,30 @@ static inline void print_int(int32_t n) {
   outbuf_pos += len;
 }
 
-token_t *alloc_token() {
+static inline token_t *alloc_token() {
   // if (token_pool_idx >= TOKEN_POOL_SIZE) abort();
   return &token_pool[token_pool_idx++];
 }
 
-uint8_t classify_char(char c) {
-  switch (c) {
-  case '{':
-    return TOK_LBRACE;
-  case '}':
-    return TOK_RBRACE;
-  case '[':
-    return TOK_LBRACKET;
-  case ']':
-    return TOK_RBRACKET;
-  case ',':
-    return TOK_COMMA;
-  case ':':
-    return TOK_COLON;
-  case '.':
-    return TOK_2DOT;
-  case '+':
-    return TOK_ADD;
-  case '-':
-    return TOK_SUB;
-  }
+uint8_t char_type_table[256] = {
+    ['{'] = TOK_LBRACE,   ['}'] = TOK_RBRACE, ['['] = TOK_LBRACKET,
+    [']'] = TOK_RBRACKET, [','] = TOK_COMMA,  [':'] = TOK_COLON,
+    ['+'] = TOK_ADD,      ['-'] = TOK_SUB,    ['.'] = TOK_2DOT,
+    ['0'] = TOK_NUM,      ['1'] = TOK_NUM,    ['2'] = TOK_NUM,
+    ['3'] = TOK_NUM,      ['4'] = TOK_NUM,    ['5'] = TOK_NUM,
+    ['6'] = TOK_NUM,      ['7'] = TOK_NUM,    ['8'] = TOK_NUM,
+    ['9'] = TOK_NUM,      ['a'] = TOK_IDENT,  ['b'] = TOK_IDENT,
+    ['c'] = TOK_IDENT,    ['d'] = TOK_IDENT,  ['e'] = TOK_IDENT,
+    ['f'] = TOK_IDENT,    ['g'] = TOK_IDENT,  ['h'] = TOK_IDENT,
+    ['i'] = TOK_IDENT,    ['j'] = TOK_IDENT,  ['k'] = TOK_IDENT,
+    ['l'] = TOK_IDENT,    ['m'] = TOK_IDENT,  ['n'] = TOK_IDENT,
+    ['o'] = TOK_IDENT,    ['p'] = TOK_IDENT,  ['q'] = TOK_IDENT,
+    ['r'] = TOK_IDENT,    ['s'] = TOK_IDENT,  ['t'] = TOK_IDENT,
+    ['u'] = TOK_IDENT,    ['v'] = TOK_IDENT,  ['w'] = TOK_IDENT,
+    ['x'] = TOK_IDENT,    ['y'] = TOK_IDENT,  ['z'] = TOK_IDENT,
+};
 
-  if (isalpha(c))
-    return TOK_IDENT;
-  if (isdigit(c))
-    return TOK_NUM;
-
-  return TOK_NONE;
-}
+#define classify_char(c) char_type_table[(uint8_t)(c)]
 
 char *st_get(char *str) {
   for (int i = 0; i < string_table_idx; i++) {
@@ -228,43 +239,22 @@ token_t *tokenize() {
         node->ident = st_get(sb_buf);
         sb_len = 0;
 
-        if (node->ident == string_table[KEYWORD_SET - 1]) {
-          prev->type = TOK_KEYWORD;
-          prev->keyword = KEYWORD_SET;
+        int str_offset = (stringtable_entry_t *)node->ident - string_table;
 
-          goto skip_new_node;
-        }
-
-        if (node->ident == string_table[KEYWORD_YOSORO - 1]) {
-          prev->type = TOK_KEYWORD;
-          prev->keyword = KEYWORD_YOSORO;
-
-          goto skip_new_node;
-        }
-
-        if (node->ident == string_table[KEYWORD_VARS - 1]) {
-          node->type = TOK_KEYWORD;
-          node->keyword = KEYWORD_VARS;
-        }
-
-        if (node->ident == string_table[KEYWORD_IHU - 1]) {
-          node->type = TOK_KEYWORD;
-          node->keyword = KEYWORD_IHU;
-        }
-
-        if (node->ident == string_table[KEYWORD_HOR - 1]) {
-          node->type = TOK_KEYWORD;
-          node->keyword = KEYWORD_HOR;
-        }
-
-        if (node->ident == string_table[KEYWORD_WHILE - 1]) {
-          node->type = TOK_KEYWORD;
-          node->keyword = KEYWORD_WHILE;
+        if (str_offset < KEYWORD_WHILE) {
+          if (str_offset < KEYWORD_YOSORO) {
+            prev->type = TOK_KEYWORD;
+            prev->keyword = str_offset + 1;
+            goto skip_new_node;
+          } else {
+            node->type = TOK_KEYWORD;
+            node->keyword = str_offset + 1;
+          }
         }
       }
 
       prev = node;
-      node = node->next = alloc_token();
+      node = alloc_token();
 
     skip_new_node:
       node->type = char_type;
@@ -297,23 +287,17 @@ token_t *tokenize() {
   return root;
 }
 
-void token_free(token_t *tok) {
-  token_t *next = tok->next;
+#define token_free(tok)
+#define token_forward(tok, n) (tok + n)
 
-  free(tok);
-  if (next)
-    token_free(next);
-}
+// static __always_inline token_t *token_forward(token_t *tok, int n) {
+//   // for (int i = 0; i < n; ++i) {
+//   //   if (!tok->next) break;
+//   //   tok = tok->next;
+//   // }
 
-token_t *token_forward(token_t *tok, int n) {
-  for (int i = 0; i < n; ++i) {
-    if (!tok->next)
-      break;
-    tok = tok->next;
-  }
-
-  return tok;
-}
+//   return tok + n;
+// }
 
 token_t *var_init(token_t *begin_brace) {
   token_t *node = token_forward(begin_brace, 2);
@@ -339,7 +323,7 @@ token_t *var_init(token_t *begin_brace) {
       ++variable_table_idx;
     }
 
-    node = node->next;
+    node = token_forward(node, 1);
   }
 
   return node;
@@ -361,203 +345,386 @@ variable_t *var_get(char *name) {
   return NULL;
 }
 
-int match_compare_op(char *op) {
-  if (op[0] == 'l') {
-    return op[1] == 't' ? CMP_LT : CMP_LE;
-  }
-
-  if (op[0] == 'g') {
-    return op[1] == 't' ? CMP_GT : CMP_GE;
-  }
-
-  return op[0] == 'e' ? CMP_EQ : CMP_NEQ;
+int match_compare_op(const char *op) {
+  return CMP_WITHSZCMP_BIT * ((op[2] == 0) && (op[0] != 'e')) |
+         CMP_GT_BIT * !!(op[0] == 'g') |
+         CMP_EQ_BIT * ((op[0] == 'e') || ((op[0] != 'n') && (op[1] == 'e')));
 }
 
 int compare(int32_t a, int32_t b, int op) {
-  // printf("compare: %d %d op=%d\n", a, b, op);
+  // neq=0 eq=1 lt=4 le=5 gt=6 ge=7
+  // 1 0 0 0 1 1 0 0 a < b
+  // 0 1 0 0 0 1 0 1 a == b
+  // 1 0 0 0 0 0 1 1 a > b
+  uint32_t cmp_magic = 0b110000011010001000110001;
+  op |= (a == b) << 3;
+  op |= (a > b) << 4;
 
-  switch (op) {
-  case CMP_LT:
-    return a < b;
-  case CMP_GT:
-    return a > b;
-  case CMP_LE:
-    return a <= b;
-  case CMP_GE:
-    return a >= b;
-  case CMP_EQ:
-    return a == b;
-  case CMP_NEQ:
-    return a != b;
-  }
+  return (cmp_magic >> op) & 1;
 
-  abort();
+  // int eq = (a == b);
+  // int gt = (a > b);
+
+  // if (op & CMP_WITHSZCMP_BIT) {
+  //   return (gt && !!(op & CMP_GT_BIT)) || (!gt && !eq && !(op & CMP_GT_BIT))
+  //   || (eq && !!(op & CMP_EQ_BIT));
+  // }
+
+  // return (eq == !!(op & CMP_EQ_BIT));
 }
 
-int eval(token_t **node) {
+// 专门处理数组索引的eval
+static inline int32_t eval_index(token_t **node) {
   int32_t result = 0;
-  int32_t op_add = 1;
+  int32_t sign = 1;
 
-  while (*node) {
-    switch ((*node)->type) {
-    case TOK_NUM: {
-      result += (*node)->num * op_add;
-      op_add = 0;
-    } break;
+  while (1) {
+    token_t *tok = *node;
+    switch (tok->type) {
+    case TOK_NUM:
+      result += sign * tok->num;
+      sign = 1;
+      break;
     case TOK_IDENT: {
-      variable_t *var = var_get((*node)->ident);
-      if (var->is_array) {
-        *node = token_forward(*node, 2);
-        result += var->array.data[eval(node) - var->array.base] * op_add;
-      } else {
-        result += var->num * op_add;
-      }
-    } break;
+      variable_t *var = tok->var_ptr;
+      result += sign * var->num;
+      sign = 1;
+      break;
+    }
     case TOK_ADD:
-      op_add = 1;
+      sign *= 1;
       break;
     case TOK_SUB:
-      op_add = -1;
+      sign *= -1;
       break;
     default:
       return result;
     }
-
-    if ((*node)->type == TOK_NUM || (*node)->type == TOK_IDENT) {
-      op_add = 0;
-    }
-
-    (*node) = (*node)->next;
+    (*node)++;
   }
 }
 
-token_t tokenblock_terminator = {0};
-token_t *block_get_end_token(token_t *lbrace, token_t *curr) {
-  token_t *node = curr;
-  token_t *prev = NULL;
+// 主eval函数 会在返回是向var_ref写入此eval块唯一的变量引用
+// 如果不止一个就写入NULL
+int eval(token_t **node, token_t **var_ref) {
+  int32_t result = 0;
+  int32_t sign = 1;
 
-  while (node) {
-    if (node == lbrace->brace_ref) {
-      return prev;
+  token_t *ref = NULL;
+  int var_num = 0;
+
+  while (*node) {
+    switch ((*node)->type) {
+    case TOK_NUM: {
+      result += (*node)->num * sign;
+      sign = 1;
+      break;
+    }
+    case TOK_IDENT: {
+      ref = *node;
+      variable_t *var = ref->var_ptr;
+      if (var->is_array) {
+        *node = token_forward(ref, 2);
+        int32_t idx = eval_index(node);
+        result += var->array.data[idx - var->array.base] * sign;
+      } else {
+        result += var->num * sign;
+      }
+      sign = 1;
+      break;
+    }
+    case TOK_ADD:
+      sign *= 1;
+      break;
+    case TOK_SUB:
+      sign *= -1;
+      break;
+    default:
+      if (var_ref)
+        *var_ref = var_num == 1 ? ref : NULL;
+      return result;
     }
 
-    prev = node;
-    node = node->next;
+    *node = token_forward(*node, 1);
   }
 
-  abort();
+  return result;
+}
+
+void optimize_hor_set(token_t *lbrace, token_t *exec_begin) {}
+
+void optimize_while_set(token_t *lbrace, token_t *exec_begin) {}
+
+void token_bind_vars(token_t *tok) {
+  for (int i = 0; i < token_pool_idx; i++) {
+    token_t *tok = &token_pool[i];
+    if (tok->type == TOK_IDENT) {
+      tok->var_ptr = var_get(tok->ident);
+    }
+  }
 }
 
 void run_tokens(token_t *tok) {
   token_t *node = tok;
   token_t *prev = tok;
 
+  uint8_t yosoro_count = 0;
+
   while (node) {
+    // printf("ip=%ld\r", node - tok);
+    // dump_tokens(node);
+    // asm("int3");
+    if (node->type == TOK_EXT_VAROFF) {
+      int val = node->var_ptr->num;
+      int attr = node->varoff_attr;
+
+      if (attr < 0) {
+        val = -val;
+        attr = -attr;
+      }
+
+      node->num = val + node->num;
+
+      node = token_forward(node, attr);
+      prev = node;
+      continue;
+    }
+
+    if (node->type == TOK_RBRACE) {
+      //  如果有打印 或已经被优化就跳过优化步骤
+      if (node->analyze_stage != ANALYZE_STAGE_NONE)
+        return;
+
+      if (yosoro_count) {
+        node->analyze_stage = ANALYZE_STAGE_SKIP;
+        return;
+      }
+
+      token_t *lbrace = node->brace_ref;
+      token_t *kw = token_forward(lbrace, 1);
+
+      if (kw->keyword == KEYWORD_HOR) {
+        optimize_hor_set(lbrace, tok);
+      } else if (kw->keyword == KEYWORD_WHILE) {
+        optimize_while_set(lbrace, tok);
+      }
+
+      node->analyze_stage = ANALYZE_STAGE_DONE;
+      return;
+    }
+
     if (node->type == TOK_NONE)
       break;
 
     if (node->type == TOK_KEYWORD) {
       if (node->keyword == KEYWORD_VARS) {
         node = var_init(prev);
+
+        token_bind_vars(node);
+        // dump_tokens(tok);
       }
 
       if (node->keyword == KEYWORD_SET) {
+        token_t *kw = node;
+        token_t *first_var = NULL;
         node = token_forward(node, 1);
-        variable_t *var = var_get(node->ident);
+        variable_t *var = node->var_ptr;
         node = token_forward(node, 2);
-        int32_t val = eval(&node);
-
-        if (!var)
-          abort();
+        int32_t val = eval(&node, &first_var);
 
         if (var->is_array) {
           node = token_forward(node, 2);
 
-          var->array.data[val - var->array.base] = eval(&node);
+          var->array.data[val - var->array.base] = eval(&node, NULL);
         } else {
           var->num = val;
+
+          if (first_var && first_var->var_ptr == var) {
+            kw->var_ptr = var;
+
+            token_t *pre_var = token_forward(kw, -1);
+            int32_t attr =
+                (pre_var->type != TOK_ADD && pre_var->type != TOK_COMMA) ? -1
+                                                                         : 1;
+            attr += node - kw;
+            kw->varoff_attr = attr;
+
+            int val = var->num;
+            var->num = 0;
+            kw->num = eval(&node, NULL);
+            var->num = val;
+          }
         }
+
+        prev = node;
         continue;
+
+        // printf("after set: %s\n", var->name);
+        // dump_tokens(node);
       }
 
       if (node->keyword == KEYWORD_YOSORO) {
+        if (yosoro_count == 0xff)
+          abort();
+        ++yosoro_count;
         node = token_forward(node, 1);
-        print_int(eval(&node));
+        print_int(eval(&node, NULL));
+        prev = node;
         continue;
       }
 
       if (node->keyword == KEYWORD_IHU) {
+        // print_int(123);
         token_t *lbrace = prev;
         node = token_forward(node, 1);
         int cmp = match_compare_op(node->ident);
         node = token_forward(node, 2);
 
-        int v1 = eval(&node);
+        int v1 = eval(&node, NULL);
         node = token_forward(node, 1);
-        int v2 = eval(&node);
+        int v2 = eval(&node, NULL);
 
-        if (!compare(v1, v2, cmp)) {
-          node = lbrace->brace_ref;
+        if (compare(v1, v2, cmp)) {
+          run_tokens(node);
         }
-        continue;
+
+        node = lbrace->brace_ref;
       }
 
       if (node->keyword == KEYWORD_HOR) {
+        // print_int(456);
         token_t *lbrace = prev;
         node = token_forward(node, 1);
-        variable_t *var = var_get(node->ident);
+        variable_t *var = node->var_ptr;
+        int *var_field = &var->num;
         node = token_forward(node, 2);
-        var->num = eval(&node);
-        node = token_forward(node, 1);
-        int endval_int = eval(&node);
-
-        if (node->type == TOK_RBRACE)
-          continue;
-
-        token_t *end_token = block_get_end_token(lbrace, node);
-        end_token->next = &tokenblock_terminator;
-        for (; var->num <= endval_int; ++var->num) {
-          run_tokens(node);
+        if (var->is_array) {
+          var_field = &var->array.data[eval_index(&node) - var->array.base];
+          node = token_forward(node, 2);
         }
-        end_token->next = lbrace->brace_ref;
+        *var_field = eval(&node, NULL);
+        node = token_forward(node, 1);
+        int endval_int = eval(&node, NULL);
 
-        prev = lbrace->brace_ref;
-        node = prev->next;
-        continue;
+        // if (node->type == TOK_RBRACE) continue;
+
+        for (; *var_field <= endval_int; ++*var_field) {
+          run_tokens(node);
+
+          if (*var_field == endval_int)
+            break;
+        }
+
+        node = lbrace->brace_ref;
       }
 
       if (node->keyword == KEYWORD_WHILE) {
+        // print_int(789);
         token_t *lbrace = prev;
         node = token_forward(node, 1);
         int cmp = match_compare_op(node->ident);
         node = token_forward(node, 2);
         token_t *e1 = node;
         token_t *e1_tmp = e1;
-        node = token_forward(node, 2);
+        eval(&node, NULL);
+        node = token_forward(node, 1);
         token_t *e2 = node;
         token_t *e2_tmp = e2;
+        eval(&node, NULL);
 
-        token_t *end_token = block_get_end_token(lbrace, node);
-        end_token->next = &tokenblock_terminator;
-        while (compare(eval(&e1_tmp), eval(&e2_tmp), cmp)) {
+        // dump_tokens(node);
+
+        while (compare(eval(&e1_tmp, NULL), eval(&e2_tmp, NULL), cmp)) {
           run_tokens(node);
           e1_tmp = e1;
           e2_tmp = e2;
         }
-        end_token->next = lbrace->brace_ref;
 
-        prev = lbrace->brace_ref;
-        node = prev->next;
-        continue;
+        node = lbrace->brace_ref;
       }
     }
 
     prev = node;
-    node = node->next;
+    node = token_forward(node, 1);
   }
 }
 
+const char *token_type_strs[] = {
+    "NONE", "LBRACE",  "RBRACE", "LBRACKET", "RBRACKET", "COMMA", "COLON",
+    "2DOT", "KEYWORD", "IDENT",  "NUM",      "ADD",      "SUB",
+};
+
+const char *token_keyword_strs[] = {
+    "NONE", "SET", "YOSORO", "VARS", "IHU", "HOR", "WHILE",
+};
+
+void dump_tokens(token_t *tok) {
+  token_t *node = tok;
+  int i = 0;
+
+  printf("#####dumping tokens#####\n");
+
+  while (node && node->type != TOK_NONE) {
+    printf("% 4d: %s", i, token_type_strs[node->type]);
+
+    if (node->type == TOK_KEYWORD) {
+      printf("=> %s", token_keyword_strs[node->keyword]);
+    }
+
+    if (node->type == TOK_IDENT) {
+      printf("=> %s", node->ident);
+      if (node->var_ptr) {
+        printf("(var, vaild=%d)", node->ident == node->var_ptr->name);
+      }
+    }
+
+    if (node->type == TOK_NUM) {
+      printf("=> %d", node->num);
+    }
+
+    printf("\n");
+
+    node = token_forward(node, 1);
+    ++i;
+  }
+
+  printf("#####dump finished#####\n");
+  fflush(stdout);
+}
+
 int main() {
+  // const char *cmp_strs[] = {
+  //   "le",
+  //   "lt",
+  //   "eq",
+  //   "neq",
+  //   "ge",
+  //   "gt",
+  // };
+
+  // struct {
+  //   int i1, i2;
+  // } testcases[] = {
+  //   {0, 1},
+  //   {1, 0},
+  //   {0, 0},
+  //   {1, 1},
+  //   {2, 1},
+  //   {1, 2},
+  //   {23, 45},
+  //   {45, 23},
+  // };
+
+  // for (int i = 0; i < 6; ++i) {
+  //   int op = match_compare_op(cmp_strs[i]);
+  //   printf("%s=> %x\n", cmp_strs[i], op);
+
+  //   for (int j = 0; j < 8; ++j) {
+  //     printf("  %d %d %s => %d\n", testcases[j].i1, testcases[j].i2,
+  //            cmp_strs[i], compare(testcases[j].i1, testcases[j].i2, op));
+  //   }
+  // }
+
   fill_inbuf();
   token_t *tok = tokenize();
 
@@ -568,4 +735,5 @@ int main() {
   var_free();
 
   _exit(0);
+  return 0;
 }
