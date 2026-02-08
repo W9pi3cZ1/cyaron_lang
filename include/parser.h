@@ -85,7 +85,7 @@ enum CmpType {
   CMP_GE = 0b110,
 };
 
-typedef unsigned char cmp_type;
+typedef short cmp_type;
 char do_cmp(cmp_type cond_typ, int left, int right);
 
 typedef struct Cond {
