@@ -16,7 +16,7 @@ enum OpCodeType {
 };
 
 typedef struct CondJmp {
-  enum CmpType cmp_typ : 16;
+  cmp_type cmp_typ;
   short offset;
 } __attribute__((packed)) CondJmp;
 
@@ -37,7 +37,7 @@ typedef struct OpCode {
     // unsigned short decl_idx;
     CondJmp cjmp;
     VarConst var_const;
-    // enum CmpType cmp_typ;
+    // cmp_type cmp_typ;
   } __attribute__((packed)) data;
 } __attribute__((packed)) OpCode;
 

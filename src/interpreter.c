@@ -118,7 +118,7 @@ int eval_expr(Interpreter *interpreter, Expr *expr) {
 
 void execute_stmts(Interpreter *interpreter, DynArr *stmts);
 
-char do_cmp(enum CmpType cond_typ, int left, int right) {
+char do_cmp(cmp_type cond_typ, int left, int right) {
   // Assume it always within range ...
   // if (cond_typ < 0 || cond_typ >= 6)
   //   return 0;

@@ -1,6 +1,7 @@
 #ifndef NO_CUSTOM_INC
 #include "lexer.h"
 #include "parser.h"
+#include "utils.h"
 #endif
 
 #ifdef CODEGEN
@@ -130,6 +131,9 @@ void test() {
 #endif
   lexer_free(&lexer);
   free(src);
+#ifndef NO_DEBUG
+  printf("DA_INIT call times: %d", da_init_call_cnts);
+#endif
 }
 
 int main() {

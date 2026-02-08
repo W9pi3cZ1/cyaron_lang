@@ -4,6 +4,7 @@
 #pragma once
 
 #ifndef NO_STD_INC
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #endif
@@ -13,7 +14,9 @@
 #endif
 #endif
 
+extern int da_init_call_cnts;
 typedef unsigned int usize;
+
 typedef struct DynArr {
   void *items;
   usize item_size;
@@ -59,6 +62,22 @@ static inline void da_set(DynArr *dyn_arr, usize idx, void *item) {
   void *dest = dyn_arr->items + idx * dyn_arr->item_size;
   memcpy(dest, item, dyn_arr->item_size);
   return;
+}
+static inline void *da_pushs_back(DynArr *dyn_arr, usize cnts) {
+  if (dyn_arr->item_cnts + cnts >= dyn_arr->capacity) {
+    while (dyn_arr->capacity > dyn_arr->item_cnts + cnts) { // loop
+      dyn_arr->capacity *= 2;                               // 2x Extend
+    }
+    dyn_arr->items =
+        realloc(dyn_arr->items, dyn_arr->capacity * dyn_arr->item_size);
+    // if (dyn_arr->items == NULL) {
+    //   err_log("Failed to Re-Allocate %zu Items (in %s)\n", dyn_arr->capacity,
+    //           __FUNCTION__);
+    // }
+  }
+  void *dest = dyn_arr->items + dyn_arr->item_cnts * dyn_arr->item_size;
+  dyn_arr->item_cnts += cnts;
+  return dest;
 }
 void da_free(DynArr *dyn_arr);
 

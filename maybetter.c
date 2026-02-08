@@ -345,32 +345,18 @@ variable_t *var_get(char *name) {
   return NULL;
 }
 
-int match_compare_op(const char *op) {
-  return CMP_WITHSZCMP_BIT * ((op[2] == 0) && (op[0] != 'e')) |
-         CMP_GT_BIT * !!(op[0] == 'g') |
-         CMP_EQ_BIT * ((op[0] == 'e') || ((op[0] != 'n') && (op[1] == 'e')));
+char match_compare_op(char ch0, char ch1) {
+  static const int8_t lut[25] = {
+      ['l' ^ 't'] = 1, ['e' ^ 'q'] = 2, ['l' ^ 'e'] = 3,
+      ['g' ^ 't'] = 4, ['n' ^ 'e'] = 5, ['g' ^ 'e'] = 6,
+  };
+  char r = lut[ch0 ^ ch1];
+  return r;
 }
 
-int compare(int32_t a, int32_t b, int op) {
-  // neq=0 eq=1 lt=4 le=5 gt=6 ge=7
-  // 1 0 0 0 1 1 0 0 a < b
-  // 0 1 0 0 0 1 0 1 a == b
-  // 1 0 0 0 0 0 1 1 a > b
-  uint32_t cmp_magic = 0b110000011010001000110001;
-  op |= (a == b) << 3;
-  op |= (a > b) << 4;
-
-  return (cmp_magic >> op) & 1;
-
-  // int eq = (a == b);
-  // int gt = (a > b);
-
-  // if (op & CMP_WITHSZCMP_BIT) {
-  //   return (gt && !!(op & CMP_GT_BIT)) || (!gt && !eq && !(op & CMP_GT_BIT))
-  //   || (eq && !!(op & CMP_EQ_BIT));
-  // }
-
-  // return (eq == !!(op & CMP_EQ_BIT));
+char compare(int32_t a, int32_t b, char op) {
+  // lt=1 eq=2 le=3 gt=4 neq=5 ge=6
+  return (op >> ((a > b) + (a >= b))) & 1;
 }
 
 // 专门处理数组索引的eval
@@ -577,7 +563,7 @@ void run_tokens(token_t *tok) {
         // print_int(123);
         token_t *lbrace = prev;
         node = token_forward(node, 1);
-        int cmp = match_compare_op(node->ident);
+        int cmp = match_compare_op(node->ident[0], node->ident[1]);
         node = token_forward(node, 2);
 
         int v1 = eval(&node, NULL);
@@ -622,7 +608,7 @@ void run_tokens(token_t *tok) {
         // print_int(789);
         token_t *lbrace = prev;
         node = token_forward(node, 1);
-        int cmp = match_compare_op(node->ident);
+        int cmp = match_compare_op(node->ident[0], node->ident[1]);
         node = token_forward(node, 2);
         token_t *e1 = node;
         token_t *e1_tmp = e1;

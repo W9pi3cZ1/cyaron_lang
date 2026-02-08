@@ -46,7 +46,9 @@ void err_log(const char *fmt, ...) {
 }
 #endif
 
+int da_init_call_cnts = 0;
 void da_init(DynArr *dyn_arr, usize item_size, usize capacity) {
+  da_init_call_cnts++;
   dyn_arr->item_cnts = 0;
   dyn_arr->capacity = capacity;
   dyn_arr->item_size = item_size;

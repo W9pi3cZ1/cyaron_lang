@@ -106,24 +106,16 @@ usize gen_incr(CodeGen *cg, int constant) {
   return cg->codes.item_cnts - 1;
 }
 
-static inline enum CmpType reverse_cmp_typ(enum CmpType cmp_typ) {
-  switch (cmp_typ) {
-  case CMP_LT:
-    return CMP_GE;
-  case CMP_GT:
-    return CMP_LE;
-  case CMP_EQ:
-    return CMP_NEQ;
-  case CMP_LE:
-    return CMP_GT;
-  case CMP_GE:
-    return CMP_LT;
-  case CMP_NEQ:
-    return CMP_EQ;
-  }
+cmp_type reverse_cmp_typ(cmp_type cmp_typ) {
+  // static cmp_type rev_cmps[] = {
+  //     [CMP_LT] = CMP_GE, [CMP_GT] = CMP_LE, [CMP_EQ] = CMP_NEQ,
+  //     [CMP_LE] = CMP_GT, [CMP_GE] = CMP_LT, [CMP_NEQ] = CMP_EQ,
+  // };
+  // return rev_cmps[cmp_typ];
+  return cmp_typ ^ 0b111;
 }
 
-usize gen_cjmp(CodeGen *cg, enum CmpType cmp_typ, short offset) {
+usize gen_cjmp(CodeGen *cg, cmp_type cmp_typ, short offset) {
   OpCode *cjmp_op = da_try_push_back(&cg->codes);
   cjmp_op->typ = OP_CJMP;
   cjmp_op->data.cjmp.cmp_typ = cmp_typ;
@@ -463,7 +455,7 @@ const char *op_code_type(enum OpCodeType op_typ) {
   }
 }
 
-const char *stringfy_cmp_typ(enum CmpType cmp_typ) {
+const char *stringfy_cmp_typ(cmp_type cmp_typ) {
   if (cmp_typ < CMP_LT || cmp_typ > CMP_GE)
     return "<Invalid>";
   const char *strs[] = {
